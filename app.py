@@ -32,6 +32,7 @@ from flask import Flask, Response, jsonify, request, send_file, send_from_direct
 from voiceai import __version__
 from voiceai.download_models import download_model, DownloadError
 from voiceai.engines.base import EngineError
+from voiceai.engines.xtts import LANGUAGES, SAMPLES_DIR, XTTSEngine
 from voiceai.registry import Registry
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -39,6 +40,7 @@ WEBUI_DIR = os.path.join(BASE_DIR, "webui")
 OUTPUT_DIR = os.path.join(BASE_DIR, "outputs")
 MANIFEST = os.path.join(OUTPUT_DIR, "manifest.json")
 MAX_TEXT_LEN = 2000
+MAX_CLONE_TEXT_LEN = 600
 MAX_HISTORY = 30
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -109,6 +111,67 @@ def _run_model_download() -> None:
         with _model_job_lock:
             _model_job.update(state="error", message=str(exc))
         log.error("Ошибка загрузки модели: %s", exc)
+
+
+# --------------------------------------------------------------------------- #
+#  Клонирование голоса (движок инициализируется в фоне, чтобы не              #
+#  задерживать запуск сервера тяжёлым импортом библиотеки TTS)                #
+# --------------------------------------------------------------------------- #
+
+_clone_engine: Optional[XTTSEngine] = None
+_clone_state = {"state": "loading"}
+_clone_job: Dict = {"state": "idle", "progress": 0, "message": ""}
+_clone_job_lock = threading.Lock()
+
+
+def _clone_engine_worker() -> None:
+    global _clone_engine
+    try:
+        _clone_engine = XTTSEngine()
+    except Exception as exc:  # библиотека может быть не установлена
+        _clone_engine = None
+        _clone_state["why_not"] = str(exc)
+    _clone_state["state"] = "ready"
+
+
+def _run_clone_model_download() -> None:
+    def progress(done: int, total: int, name: str) -> None:
+        with _clone_job_lock:
+            _clone_job["message"] = name
+            _clone_job["progress"] = round(done / total * 100, 1) if total > 0 else 0
+
+    with _clone_job_lock:
+        _clone_job.update(state="working", progress=0, message="подключение…")
+    try:
+        path = _clone_engine.download_model(on_progress=progress)
+        _clone_engine.needs_model = False
+        _clone_engine.available = True
+        _clone_engine.why_not = ""
+        with _clone_job_lock:
+            _clone_job.update(state="done", progress=100, message=f"Модель сохранена: {path}")
+        log.info("Модель клонирования скачана: %s", path)
+        threading.Thread(target=_clone_engine.warmup, daemon=True).start()
+    except Exception as exc:
+        with _clone_job_lock:
+            _clone_job.update(state="error", message=str(exc))
+        log.error("Ошибка загрузки модели клонирования: %s", exc)
+
+
+_TRANSLIT = {
+    "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ё": "yo",
+    "ж": "zh", "з": "z", "и": "i", "й": "y", "к": "k", "л": "l", "м": "m",
+    "н": "n", "о": "o", "п": "p", "р": "r", "с": "s", "т": "t", "у": "u",
+    "ф": "f", "х": "h", "ц": "ts", "ч": "ch", "ш": "sh", "щ": "sch",
+    "ъ": "", "ы": "y", "ь": "", "э": "e", "ю": "yu", "я": "ya",
+}
+
+
+def _slugify(name: str) -> str:
+    """Имя → безопасный slug (только ASCII): папки и URL без сюрпризов."""
+    text = name.lower()
+    text = "".join(_TRANSLIT.get(ch, ch) for ch in text)
+    slug = re.sub(r"[^a-z0-9]+", "-", text).strip("-")[:40]
+    return slug or time.strftime("voice-%H%M%S")
 
 
 # --------------------------------------------------------------------------- #
@@ -272,6 +335,167 @@ def create_app() -> Flask:
     def api_models_status():
         return jsonify(dict(_model_job))
 
+    # --- клонирование голоса ---------------------------------------------- #
+
+    threading.Thread(target=_clone_engine_worker, daemon=True).start()
+
+    @app.get("/api/clone/engine")
+    def api_clone_engine():
+        if _clone_state["state"] != "ready":
+            return jsonify({"state": "loading"})
+        if _clone_engine is None:
+            return jsonify({"state": "ready", "available": False,
+                            "why_not": _clone_state.get("why_not", "Библиотека TTS недоступна")})
+        return jsonify({
+            "state": "ready",
+            "available": _clone_engine.available,
+            "needs_model": _clone_engine.needs_model,
+            "why_not": _clone_engine.why_not,
+            "languages": [{"code": k, "name": v} for k, v in LANGUAGES.items()],
+        })
+
+    @app.get("/api/clone/samples")
+    def api_clone_samples():
+        if _clone_state["state"] != "ready" or _clone_engine is None:
+            return jsonify({"samples": []})
+        return jsonify({"samples": _clone_engine.list_samples()})
+
+    @app.post("/api/clone/samples")
+    def api_clone_samples_upload():
+        if _clone_state["state"] != "ready" or _clone_engine is None:
+            return jsonify({"error": "Движок клонирования ещё не готов"}), 503
+        file = request.files.get("file")
+        if file is None:
+            return jsonify({"error": "Файл с записью голоса не получен"}), 400
+        name = (request.form.get("name") or "").strip()[:60] or "Мой голос"
+
+        data = file.read()
+        if len(data) > 25 * 1024 * 1024:
+            return jsonify({"error": "Файл слишком большой (до 25 МБ)"}), 400
+
+        # проверка, что это валидный WAV, и измерение длительности
+        import io
+        import wave
+
+        try:
+            with wave.open(io.BytesIO(data)) as w:
+                seconds = w.getnframes() / float(w.getframerate() or 1)
+        except Exception:
+            return jsonify({"error": "Нужен WAV-файл. Интерфейс сам конвертирует "
+                                      "запись/микрофон в WAV — загрузите файл через страницу."}), 400
+        if seconds < 2:
+            return jsonify({"error": f"Запись слишком короткая ({seconds:.1f} c). Нужно хотя бы 5–10 секунд."}), 400
+        if seconds > 180:
+            return jsonify({"error": "Запись слишком длинная. Лучше 10–30 секунд."}), 400
+
+        slug = _slugify(name)
+        folder = os.path.join(SAMPLES_DIR, slug)
+        suffix = 2
+        while os.path.isdir(folder):
+            slug = f"{_slugify(name)}-{suffix}"
+            suffix += 1
+            folder = os.path.join(SAMPLES_DIR, slug)
+        os.makedirs(folder, exist_ok=True)
+        with open(os.path.join(folder, "sample.wav"), "wb") as fh:
+            fh.write(data)
+        meta = {"name": name, "seconds": round(seconds, 1), "ts": time.strftime("%Y-%m-%d %H:%M")}
+        with open(os.path.join(folder, "meta.json"), "w", encoding="utf-8") as fh:
+            json.dump(meta, fh, ensure_ascii=False)
+        return jsonify({"ok": True, "slug": slug, **meta, "url": f"/samples/{slug}"})
+
+    @app.delete("/api/clone/samples/<slug>")
+    def api_clone_samples_delete(slug: str):
+        import shutil
+
+        folder = os.path.join(SAMPLES_DIR, _safe_filename(slug))
+        if os.path.isdir(folder):
+            shutil.rmtree(folder, ignore_errors=True)
+        return jsonify({"ok": True})
+
+    @app.get("/samples/<slug>")
+    def sample_audio(slug: str):
+        path = os.path.join(SAMPLES_DIR, _safe_filename(slug), "sample.wav")
+        if not os.path.isfile(path):
+            return jsonify({"error": "Образец не найден"}), 404
+        return send_file(path, mimetype="audio/wav")
+
+    @app.post("/api/clone/say")
+    def api_clone_say():
+        if _clone_state["state"] != "ready" or _clone_engine is None:
+            return jsonify({"error": "Движок клонирования ещё не готов"}), 503
+        if not _clone_engine.available:
+            return jsonify({"error": f"Клонирование недоступно: {_clone_engine.why_not}"}), 400
+
+        data = request.get_json(silent=True) or {}
+        text = (data.get("text") or "").strip()
+        slug = (data.get("voice") or "").strip()
+        language = data.get("language", "ru")
+        if not text:
+            return jsonify({"error": "Введите текст"}), 400
+        if len(text) > MAX_CLONE_TEXT_LEN:
+            return jsonify({"error": f"Для клонирования максимум {MAX_CLONE_TEXT_LEN} символов за раз"}), 400
+        if language not in LANGUAGES:
+            return jsonify({"error": f"Неизвестный язык «{language}»"}), 400
+        try:
+            speed = float(data.get("speed", 1.0))
+        except (TypeError, ValueError):
+            return jsonify({"error": "Некорректная скорость"}), 400
+
+        started = time.time()
+        try:
+            result = _clone_engine.synthesize(text, slug, speed=speed,
+                                              options={"language": language})
+        except EngineError as exc:
+            return jsonify({"error": str(exc)}), 400
+        except Exception as exc:
+            log.exception("Ошибка клонирования")
+            return jsonify({"error": f"Внутренняя ошибка: {exc}"}), 500
+        synth_ms = int((time.time() - started) * 1000)
+
+        os.makedirs(OUTPUT_DIR, exist_ok=True)
+        voice_name = next((s.get("name", s["slug"]) for s in _clone_engine.list_samples()
+                           if s["slug"] == slug), slug)
+        stamp = time.strftime("%Y%m%d-%H%M%S")
+        filename = _safe_filename(f"{stamp}_clone-{slug}.wav")
+        with open(os.path.join(OUTPUT_DIR, filename), "wb") as fh:
+            fh.write(result.audio)
+
+        try:
+            import wave as wavemod
+            with wavemod.open(os.path.join(OUTPUT_DIR, filename), "rb") as w:
+                seconds = round(w.getnframes() / w.getframerate(), 2)
+        except Exception:
+            seconds = None
+
+        entry = {
+            "file": filename,
+            "url": f"/audio/{filename}",
+            "text": text[:140] + ("…" if len(text) > 140 else ""),
+            "engine": "xtts",
+            "voice": slug,
+            "voice_name": f"🎭 {voice_name}",
+            "speed": speed,
+            "seconds": seconds,
+            "synth_ms": synth_ms,
+            "ts": stamp,
+        }
+        _add_history(entry)
+        return jsonify(entry)
+
+    @app.post("/api/clone/download")
+    def api_clone_download():
+        if _clone_state["state"] != "ready" or _clone_engine is None:
+            return jsonify({"started": False, "message": "Движок ещё не готов"}), 503
+        with _clone_job_lock:
+            if _clone_job["state"] == "working":
+                return jsonify({"started": False, "message": "Уже скачивается"}), 200
+        threading.Thread(target=_run_clone_model_download, daemon=True).start()
+        return jsonify({"started": True})
+
+    @app.get("/api/clone/status")
+    def api_clone_status():
+        return jsonify(dict(_clone_job))
+
     return app
 
 
@@ -316,6 +540,25 @@ def _cmd_voices(_args) -> int:
     return 0
 
 
+def _cmd_clone(args) -> int:
+    engine = XTTSEngine()
+    if not engine.available:
+        print(f"Клонирование недоступно: {engine.why_not}")
+        return 1
+    samples = engine.list_samples()
+    if not samples:
+        print("Сначала загрузите образец голоса через веб-интерфейс (вкладка «Клонирование»).")
+        return 1
+    slug = args.voice or samples[0]["slug"]
+    result = engine.synthesize(args.text, slug, speed=args.speed,
+                               options={"language": args.lang})
+    out = args.out or f"clone_{slug}.wav"
+    with open(out, "wb") as fh:
+        fh.write(result.audio)
+    print(f"Готово: {out} ({len(result.audio) // 1024} КБ)")
+    return 0
+
+
 def _cmd_serve(args) -> int:
     app = create_app()
     silero = registry.get("silero")
@@ -353,6 +596,17 @@ def main() -> int:
 
     p_dl = sub.add_parser("download-models", help="скачать нейромодель")
     p_dl.set_defaults(func=lambda _a: __import__("voiceai.download_models", fromlist=["main"]).main())
+
+    p_clone = sub.add_parser("clone", help="озвучить текст склонированным голосом")
+    p_clone.add_argument("text", help="текст для озвучки")
+    p_clone.add_argument("--voice", help="образец голоса (см. список в веб-интерфейсе)")
+    p_clone.add_argument("--lang", default="ru", choices=list(LANGUAGES))
+    p_clone.add_argument("--speed", type=float, default=1.0)
+    p_clone.add_argument("--out", help="имя выходного файла")
+    p_clone.set_defaults(func=_cmd_clone)
+
+    p_dlc = sub.add_parser("download-clone-model", help="скачать модель клонирования (~1.9 ГБ)")
+    p_dlc.set_defaults(func=lambda _a: __import__("voiceai.download_clone_model", fromlist=["main"]).main())
 
     args = parser.parse_args()
     if not getattr(args, "command", None):

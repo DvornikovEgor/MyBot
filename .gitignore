@@ -3,11 +3,15 @@ __pycache__/
 *.pyc
 .venv/
 
-# Модель нейросети скачивается отдельно (см. python app.py download-models)
+# Модели нейросетей скачиваются отдельно:
+#   python app.py download-models         (Silero, ~40 МБ)
+#   python app.py download-clone-model    (XTTS v2, ~1.9 ГБ)
 models/*.pt
 models/*.part
+models/xtts-v2/
 
-# Сгенерированные аудиофайлы
+# Сохранённые образцы голосов и готовые озвучки
+voice_samples/
 outputs/
 
 # Служебное
