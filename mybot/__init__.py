@@ -23,12 +23,14 @@ from .engine import (
 )
 from .models import MLP, CharRNN
 from .data import CharVocab, TextDataset, load_text
+from .imaging import generate as generate_image, TextToImage
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "Tensor", "no_grad", "grad_enabled", "F", "nn", "utils",
     "Module", "Linear", "RNNCell", "Sequential", "Dropout", "Tanh", "ReLU", "Sigmoid",
     "SGD", "Adam", "MLP", "CharRNN", "CharVocab", "TextDataset", "load_text",
+    "generate_image", "TextToImage",
     "__version__",
 ]
