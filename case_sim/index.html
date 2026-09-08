@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CS2 — Симулятор открытия кейсов</title>
+<style>
+  :root{
+    --bg:#0e141b; --panel:#1b2838; --panel2:#16202d; --line:#2a475e;
+    --text:#e6edf3; --muted:#8fa1b3; --accent:#66c0f4;
+    --milspec:#4b69ff; --restricted:#8847ff; --classified:#d32ce6;
+    --covert:#eb4b4b; --gold:#e4ae39;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1100px 500px at 70% -10%, #1c2f44 0%, var(--bg) 60%);
+       color:var(--text);font-family:"Segoe UI",system-ui,Roboto,Arial,sans-serif;min-height:100vh}
+  header{display:flex;align-items:center;gap:16px;padding:20px 26px;flex-wrap:wrap}
+  h1{font-size:22px;margin:0;letter-spacing:1px;text-transform:uppercase}
+  h1 b{color:var(--accent)}
+  .sub{color:var(--muted);font-size:12.5px;width:100%;margin-top:-8px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 14px;font-size:13px}
+  .stat b{color:var(--accent);font-size:15px}
+  main{padding:0 26px 40px;max-width:1180px;margin:0 auto}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:2px;color:var(--muted);margin:22px 0 10px}
+  button{font:inherit;cursor:pointer;border:none;border-radius:8px}
+  .btn{background:linear-gradient(180deg,#47bfff,#1a44c2);color:#fff;font-weight:700;padding:13px 26px;font-size:15px}
+  .btn:disabled{filter:grayscale(.7);opacity:.6;cursor:default}
+  .btn.small{padding:8px 14px;font-size:13px}
+  .btn.ghost{background:var(--panel2);border:1px solid var(--line);color:var(--text);font-weight:400}
+  .btn.danger{background:#5c2430}
+  .muted{color:var(--muted)}
+  .hidden{display:none!important}
+
+  /* выбор кейса */
+  .cases{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px}
+  .case{background:var(--panel);border:2px solid var(--line);border-radius:14px;padding:16px;cursor:pointer;
+        text-align:center;transition:transform .1s, border-color .15s}
+  .case:hover{transform:translateY(-2px)}
+  .case.sel{border-color:var(--accent);box-shadow:0 0 24px rgba(102,192,244,.25)}
+  .case .crate{font-size:56px;line-height:1;filter:drop-shadow(0 6px 12px rgba(0,0,0,.5))}
+  .case .cn{font-weight:700;margin-top:8px;font-size:15px}
+  .case .cm{color:var(--muted);font-size:12px;margin-top:4px}
+  .case .cp{color:var(--gold);font-weight:700;margin-top:6px}
+
+  /* рулетка */
+  .spinner-wrap{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:26px 0;
+                position:relative;overflow:hidden;margin-bottom:14px}
+  .marker{position:absolute;left:50%;top:0;bottom:0;width:3px;background:var(--gold);z-index:5;
+          box-shadow:0 0 12px rgba(228,174,57,.8)}
+  .marker:before,.marker:after{content:"";position:absolute;left:50%;transform:translateX(-50%);
+          border:8px solid transparent}
+  .marker:before{top:0;border-top:10px solid var(--gold)}
+  .marker:after{bottom:0;border-bottom:10px solid var(--gold)}
+  .reel{display:flex;gap:10px;padding:10px 0;will-change:transform}
+  .cell{flex:0 0 150px;height:150px;background:var(--panel2);border-radius:10px;position:relative;
+        border-bottom:4px solid var(--rc,#4b69ff);display:flex;flex-direction:column;align-items:center;
+        justify-content:flex-end;padding-bottom:10px;overflow:hidden}
+  .cell .art{width:118px;height:70px;color:var(--rc);position:absolute;top:14px}
+  .cell .nm{font-size:11px;text-align:center;line-height:1.25;color:var(--text);max-width:140px}
+  .cell .nm i{font-style:normal;color:var(--muted);display:block;font-size:10px}
+  .cell.win{animation:pulse .5s ease 3}
+  @keyframes pulse{50%{box-shadow:0 0 28px var(--rc);transform:scale(1.05)}}
+  .center{display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap}
+  .odds{font-size:11.5px;color:var(--muted);text-align:center;margin-top:8px}
+  .odds b{font-weight:600}
+
+  /* баннер результата */
+  .result-banner{display:none;align-items:center;gap:16px;background:var(--panel);border-radius:14px;
+        padding:16px 20px;margin-bottom:14px;border:1px solid var(--rc,var(--line));
+        box-shadow:0 0 34px -6px var(--rc,transparent)}
+  .result-banner.show{display:flex}
+  .result-banner .art{width:150px;height:86px;color:var(--rc)}
+  .result-banner .rn{font-size:19px;font-weight:800}
+  .result-banner .rn .st{color:#cf6a32}
+  .result-banner .rd{color:var(--muted);font-size:13px;margin-top:4px}
+  .result-banner .rp{margin-left:auto;font-size:20px;font-weight:800;color:var(--gold);white-space:nowrap}
+
+  /* инвентарь */
+  .inv{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}
+  .item{background:var(--panel);border:1px solid var(--line);border-bottom:4px solid var(--rc,#4b69ff);
+        border-radius:10px;padding:10px;text-align:center}
+  .item .art{width:120px;height:66px;color:var(--rc);margin:0 auto}
+  .item .nm{font-size:11.5px;line-height:1.3;margin-top:4px;min-height:30px}
+  .item .nm i{font-style:normal;color:var(--muted);display:block;font-size:10px}
+  .item .nm .st{color:#cf6a32;font-size:10px}
+  .item .pr{color:var(--gold);font-weight:700;margin:6px 0}
+  .empty{color:var(--muted);font-size:13px;padding:12px 0}
+  .toast{position:fixed;top:18px;left:50%;transform:translateX(-50%);background:#214a2e;border:1px solid #3ecf8e;
+        color:#c9f5dd;padding:10px 18px;border-radius:10px;font-size:14px;z-index:99;opacity:0;transition:opacity .3s}
+  .toast.show{opacity:1}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>CS2 · Симулятор <b>кейсов</b></h1>
+  <div class="stat">Баланс: <b id="balance">—</b></div>
+  <div class="stat">Инвентарь: <b id="invValue">—</b></div>
+  <div class="stat">Открыто кейсов: <b id="statOpened">0</b></div>
+  <div class="stat">Потрачено: <b id="statSpent">—</b></div>
+  <div class="stat">Лучший дроп: <b id="statBest">—</b></div>
+  <button class="btn ghost small" id="btnSound" title="Звук">🔊 Звук вкл</button>
+  <button class="btn ghost small" id="btnReset">Сбросить прогресс</button>
+  <div class="sub">Шансы как в CS2: синее 79.92% · фиолетовое 15.98% · розовое 3.2% · красное 0.64% · золото 0.26%. Цены ориентировочные. Это фан-симулятор, не связан с Valve.</div>
+</header>
+
+<main>
+  <h2>1 · Выбери кейс</h2>
+  <div class="cases" id="caseList"></div>
+
+  <h2>2 · Открой кейс</h2>
+  <div class="spinner-wrap">
+    <div class="marker"></div>
+    <div class="reel" id="reel"></div>
+  </div>
+  <div class="center">
+    <button class="btn" id="btnOpen">🔑 Открыть кейс — <span id="openPrice">250 ₽</span></button>
+    <button class="btn ghost" id="btnFast">⚡ Быстрое открытие: <span id="fastState">выкл</span></button>
+  </div>
+
+  <div class="result-banner" id="resultBanner" style="margin-top:14px">
+    <div class="art" id="rbArt"></div>
+    <div>
+      <div class="rn" id="rbName"></div>
+      <div class="rd" id="rbDesc"></div>
+    </div>
+    <div class="rp" id="rbPrice"></div>
+  </div>
+
+  <div class="odds" id="caseContents"></div>
+
+  <h2>3 · Твой инвентарь <span class="muted" id="invCount"></span></h2>
+  <div class="center" style="justify-content:flex-end;margin-bottom:10px">
+    <button class="btn small danger hidden" id="btnSellAll">Продать всё</button>
+  </div>
+  <div class="inv" id="inventory"><div class="empty">Пусто. Открой первый кейс!</div></div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+/* ================================ ДАННЫЕ ================================ */
+/* Шансы выпадения редкостей — официальные значения CS2 */
+const ODDS = [
+  { tier:"milspec",    chance:79.92, name:"Армейское качество", color:"#4b69ff" },
+  { tier:"restricted", chance:15.98, name:"Запрещённое",        color:"#8847ff" },
+  { tier:"classified", chance:3.20,  name:"Засекреченное",      color:"#d32ce6" },
+  { tier:"covert",     chance:0.64,  name:"Тайное",             color:"#eb4b4b" },
+  { tier:"gold",       chance:0.26,  name:"★ Исключительное",   color:"#e4ae39" },
+];
+const WEARS = [
+  { id:"FN", name:"Прямо с завода",    chance:8,  mult:1.35 },
+  { id:"MW", name:"Немного поношенное", chance:22, mult:1.15 },
+  { id:"FT", name:"После полевых",     chance:38, mult:1.00 },
+  { id:"WW", name:"Поношенное",        chance:22, mult:0.80 },
+  { id:"BS", name:"Закалённое в боях", chance:10, mult:0.62 },
+];
+const KEY_PRICE = 250;
+
+/* w = тип силуэта; p = примерная цена в рублях */
+const CASES = [
+{
+  id:"dreams", icon:"🌙", name:"Сны и кошмары", year:"2022",
+  covert:[
+    { weapon:"AK-47", skin:"Nightwish", w:"rifle", p:9200 },
+    { weapon:"MP9", skin:"Starlight Protector", w:"smg", p:5600 },
+  ],
+  classified:[
+    { weapon:"USP-S", skin:"Ticket to Hell", w:"pistol", p:850 },
+    { weapon:"Dual Berettas", skin:"Melondrama", w:"pistol", p:520 },
+    { weapon:"G3SG1", skin:"Dream Glade", w:"rifle", p:430 },
+  ],
+  restricted:[
+    { weapon:"M4A1-S", skin:"Night Terror", w:"rifle", p:360 },
+    { weapon:"P90", skin:"Cocoa Rampage", w:"smg", p:260 },
+    { weapon:"MAG-7", skin:"Foresight", w:"shotgun", p:230 },
+    { weapon:"Five-SeveN", skin:"Scrawl", w:"pistol", p:210 },
+  ],
+  milspec:[
+    { weapon:"FAMAS", skin:"Rapid Eye Movement", w:"rifle", p:150 },
+    { weapon:"MAC-10", skin:"Ensnared", w:"smg", p:110 },
+    { weapon:"Sawed-Off", skin:"Spirit Board", w:"shotgun", p:120 },
+    { weapon:"PP-Bizon", skin:"Space Cat", w:"smg", p:160 },
+    { weapon:"SCAR-20", skin:"Poultrygeist", w:"rifle", p:100 },
+    { weapon:"Nova", skin:"Windblown", w:"shotgun", p:90 },
+    { weapon:"MP7", skin:"Abyssal Apparition", w:"smg", p:130 },
+  ],
+  gold:[
+    { weapon:"★ Bowie Knife", skin:"Gamma Doppler", w:"knife", p:46000 },
+    { weapon:"★ Bowie Knife", skin:"Fade", w:"knife", p:38000 },
+    { weapon:"★ Bowie Knife", skin:"Lore", w:"knife", p:30000 },
+    { weapon:"★ Huntsman Knife", skin:"Marble Fade", w:"knife", p:34000 },
+    { weapon:"★ Huntsman Knife", skin:"Slaughter", w:"knife", p:27000 },
+    { weapon:"★ Huntsman Knife", skin:"Crimson Web", w:"knife", p:24000 },
+    { weapon:"★ Bowie Knife", skin:"Ultraviolet", w:"knife", p:14000 },
+    { weapon:"★ Huntsman Knife", skin:"Black Laminate", w:"knife", p:12000 },
+  ],
+},
+{
+  id:"kilowatt", icon:"⚡", name:"Киловольт", year:"2024 · первый кейс CS2",
+  covert:[
+    { weapon:"AK-47", skin:"Inheritance", w:"rifle", p:7800 },
+    { weapon:"AWP", skin:"Chrome Cannon", w:"sniper", p:6400 },
+  ],
+  classified:[
+    { weapon:"M4A1-S", skin:"Black Lotus", w:"rifle", p:2600 },
+    { weapon:"USP-S", skin:"Jawbreaker", w:"pistol", p:950 },
+    { weapon:"Zeus x27", skin:"Olympus Mons", w:"pistol", p:720 },
+  ],
+  restricted:[
+    { weapon:"M4A4", skin:"Etch Lord", w:"rifle", p:280 },
+    { weapon:"MP7", skin:"Just Smile", w:"smg", p:220 },
+    { weapon:"Glock-18", skin:"Block-18", w:"pistol", p:190 },
+    { weapon:"Sawed-Off", skin:"Analog Input", w:"shotgun", p:170 },
+    { weapon:"Five-SeveN", skin:"Hybrid", w:"pistol", p:150 },
+  ],
+  milspec:[
+    { weapon:"MAC-10", skin:"Light Box", w:"smg", p:130 },
+    { weapon:"Tec-9", skin:"Slag", w:"pistol", p:90 },
+    { weapon:"Dual Berettas", skin:"Hideout", w:"pistol", p:85 },
+    { weapon:"UMP-45", skin:"Motorized", w:"smg", p:100 },
+    { weapon:"SSG 08", skin:"Dezastre", w:"sniper", p:120 },
+    { weapon:"Nova", skin:"Dark Sigil", w:"shotgun", p:80 },
+    { weapon:"XM1014", skin:"Irezumi", w:"shotgun", p:95 },
+  ],
+  gold:[
+    { weapon:"★ Kukri Knife", skin:"Doppler", w:"knife", p:52000 },
+    { weapon:"★ Kukri Knife", skin:"Fade", w:"knife", p:45000 },
+    { weapon:"★ Kukri Knife", skin:"Slaughter", w:"knife", p:29000 },
+    { weapon:"★ Kukri Knife", skin:"Case Hardened", w:"knife", p:18000 },
+    { weapon:"★ Kukri Knife", skin:"Crimson Web", w:"knife", p:24000 },
+    { weapon:"★ Kukri Knife", skin:"Blue Steel", w:"knife", p:13000 },
+    { weapon:"★ Kukri Knife", skin:"Stained", w:"knife", p:10500 },
+    { weapon:"★ Kukri Knife", skin:"Night Stripe", w:"knife", p:9800 },
+    { weapon:"★ Kukri Knife", skin:"Safari Mesh", w:"knife", p:9200 },
+  ],
+},
+{
+  id:"revolution", icon:"✊", name:"Революция", year:"2023 · выпадают перчатки",
+  covert:[
+    { weapon:"M4A4", skin:"Temukau", w:"rifle", p:8400 },
+    { weapon:"AK-47", skin:"Head Shot", w:"rifle", p:6700 },
+  ],
+  classified:[
+    { weapon:"AWP", skin:"Duality", w:"sniper", p:1700 },
+    { weapon:"P2000", skin:"Wicked Sick", w:"pistol", p:520 },
+    { weapon:"UMP-45", skin:"Wild Child", w:"smg", p:470 },
+  ],
+  restricted:[
+    { weapon:"M4A1-S", skin:"Emphorosaur-S", w:"rifle", p:380 },
+    { weapon:"P90", skin:"Neoqueen", w:"smg", p:230 },
+    { weapon:"R8 Revolver", skin:"Banana Cannon", w:"pistol", p:210 },
+    { weapon:"Glock-18", skin:"Umbral Rabbit", w:"pistol", p:180 },
+    { weapon:"Tec-9", skin:"Decimator", w:"pistol", p:160 },
+  ],
+  milspec:[
+    { weapon:"Dual Berettas", skin:"Flora Carnivora", w:"pistol", p:140 },
+    { weapon:"SG 553", skin:"Cyberforce", w:"rifle", p:110 },
+    { weapon:"MAC-10", skin:"Sakkaku", w:"smg", p:120 },
+    { weapon:"MP5-SD", skin:"Liquidation", w:"smg", p:90 },
+    { weapon:"MAG-7", skin:"Insomnia", w:"shotgun", p:85 },
+    { weapon:"MP9", skin:"Featherweight", w:"smg", p:95 },
+    { weapon:"SCAR-20", skin:"Fragments", w:"rifle", p:75 },
+  ],
+  gold:[
+    { weapon:"★ Sport Gloves", skin:"Vice", w:"gloves", p:58000 },
+    { weapon:"★ Specialist Gloves", skin:"Fade", w:"gloves", p:42000 },
+    { weapon:"★ Sport Gloves", skin:"Amphibious", w:"gloves", p:33000 },
+    { weapon:"★ Specialist Gloves", skin:"Crimson Web", w:"gloves", p:36000 },
+    { weapon:"★ Sport Gloves", skin:"Omega", w:"gloves", p:30000 },
+    { weapon:"★ Driver Gloves", skin:"King Snake", w:"gloves", p:19000 },
+    { weapon:"★ Driver Gloves", skin:"Imperial Plaid", w:"gloves", p:16000 },
+    { weapon:"★ Hand Wraps", skin:"Cobalt Skulls", w:"gloves", p:13000 },
+    { weapon:"★ Moto Gloves", skin:"POW!", w:"gloves", p:10500 },
+    { weapon:"★ Hydra Gloves", skin:"Emerald", w:"gloves", p:11000 },
+    { weapon:"★ Hand Wraps", skin:"Overprint", w:"gloves", p:9800 },
+    { weapon:"★ Moto Gloves", skin:"Polygon", w:"gloves", p:9500 },
+    { weapon:"★ Hydra Gloves", skin:"Case Hardened", w:"gloves", p:8800 },
+    { weapon:"★ Specialist Gloves", skin:"Buckshot", w:"gloves", p:8200 },
+  ],
+},
+];
+
+/* ============================ СИЛУЭТЫ ОРУЖИЯ ============================ */
+const SVGS = {
+  rifle:`<svg viewBox="0 0 240 120" fill="none" stroke="currentColor" stroke-width="5" stroke-linejoin="round">
+    <path d="M18,66 L46,60 L48,52 L66,52 L68,58 L196,54 L196,48 L230,48 L230,56 L200,60 L96,66 L88,86 L70,90 L76,68 L56,70 L44,88 L30,88 L40,70 L18,74 Z" fill="currentColor" fill-opacity=".18"/>
+    <path d="M96,66 L108,88 L124,86 L112,64" fill="currentColor" fill-opacity=".18"/></svg>`,
+  sniper:`<svg viewBox="0 0 240 120" fill="none" stroke="currentColor" stroke-width="5" stroke-linejoin="round">
+    <circle cx="98" cy="34" r="10"/><path d="M60,34 L132,34"/>
+    <path d="M14,66 L40,60 L42,50 L60,50 L62,56 L206,52 L206,46 L234,46 L234,56 L208,60 L100,66 L92,84 L74,88 L80,68 L52,72 L40,88 L26,88 L36,72 L14,74 Z" fill="currentColor" fill-opacity=".18"/></svg>`,
+  pistol:`<svg viewBox="0 0 240 120" fill="none" stroke="currentColor" stroke-width="5" stroke-linejoin="round">
+    <path d="M52,38 L196,38 L200,58 L172,62 L168,56 L96,58 L88,94 L58,94 L66,60 L52,58 Z" fill="currentColor" fill-opacity=".18"/>
+    <path d="M96,58 L118,58 L114,74 L98,72" fill="currentColor" fill-opacity=".12"/></svg>`,
+  smg:`<svg viewBox="0 0 240 120" fill="none" stroke="currentColor" stroke-width="5" stroke-linejoin="round">
+    <path d="M36,50 L210,50 L210,66 L188,66 L188,60 L120,62 L116,92 L94,92 L100,62 L66,64 L58,80 L40,80 L48,64 L36,62 Z" fill="currentColor" fill-opacity=".18"/>
+    <path d="M146,62 L160,84 L176,80 L162,60" fill="currentColor" fill-opacity=".15"/>
+    <path d="M210,54 L226,54 L226,60 L210,60" fill="currentColor" fill-opacity=".18"/></svg>`,
+  shotgun:`<svg viewBox="0 0 240 120" fill="none" stroke="currentColor" stroke-width="5" stroke-linejoin="round">
+    <path d="M16,62 L44,56 L46,48 L64,48 L66,54 L224,50 L224,58 L70,64 L62,84 L44,88 L50,66 L16,70 Z" fill="currentColor" fill-opacity=".18"/>
+    <path d="M78,62 L150,58 L150,70 L80,74 Z" fill="currentColor" fill-opacity=".12"/></svg>`,
+  knife:`<svg viewBox="0 0 240 120" fill="none" stroke="currentColor" stroke-width="5" stroke-linejoin="round">
+    <path d="M34,72 C34,58 46,50 58,54 L64,62 C54,62 46,66 46,76 Z" fill="currentColor" fill-opacity=".2"/>
+    <circle cx="42" cy="82" r="11"/>
+    <path d="M62,60 C110,22 178,24 216,52 C184,44 128,48 92,74 L70,84 L58,66 Z" fill="currentColor" fill-opacity=".2"/></svg>`,
+  gloves:`<svg viewBox="0 0 240 120" fill="none" stroke="currentColor" stroke-width="5" stroke-linejoin="round">
+    <path d="M76,96 L76,52 C76,44 84,40 90,44 L90,34 C90,28 98,26 100,32 L100,30 C100,24 110,22 112,28 L112,30 C112,24 122,24 124,30 L124,52 L136,42 C142,38 150,42 148,50 L138,72 L138,96 Z" fill="currentColor" fill-opacity=".18"/>
+    <path d="M76,80 L138,80" stroke-width="4"/></svg>`,
+};
+
+/* ============================== УТИЛИТЫ ================================= */
+const $ = id => document.getElementById(id);
+const fmt = n => n.toLocaleString("ru-RU") + " ₽";
+const rnd = arr => arr[Math.floor(Math.random() * arr.length)];
+
+function pickWeighted(items){ // items: [{chance, ...}]
+  const r = Math.random() * 100;
+  let acc = 0;
+  for (const it of items){ acc += it.chance; if (r < acc) return it; }
+  return items[items.length - 1];
+}
+function hashStr(s){ let h = 0; for (let i = 0; i < s.length; i++){ h = (h * 31 + s.charCodeAt(i)) | 0; } return Math.abs(h); }
+
+function rollDrop(c){
+  const tier = pickWeighted(ODDS).tier;
+  const base = rnd(c[tier]);
+  const wear = tier === "gold" ? null : pickWeighted(WEARS);
+  const stattrak = tier !== "gold" && Math.random() < 0.10;
+  const price = Math.round(base.p * (wear ? wear.mult : 1) * (stattrak ? 1.9 : 1));
+  return {
+    caseId: c.id, tier, weapon: base.weapon, skin: base.skin, w: base.w,
+    wear: wear ? wear.id : null, wearName: wear ? wear.name : null,
+    stattrak, price,
+    id: Date.now() + "-" + Math.random().toString(36).slice(2, 7),
+  };
+}
+function itemName(d){ return d.weapon + " | " + d.skin; }
+function tierOf(d){ return ODDS.find(o => o.tier === d.tier); }
+
+function artHTML(d, cls){
+  const t = tierOf(d);
+  const hue = hashStr(itemName(d)) % 360;
+  return `<div class="${cls}" style="--rc:${t.color};filter:hue-rotate(${(hue % 120) - 60}deg)">${SVGS[d.w] || SVGS.rifle}</div>`;
+}
+
+/* ================================ ЗВУК ================================== */
+let audioCtx = null, soundOn = true;
+function ac(){ if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); return audioCtx; }
+function tick(){
+  if (!soundOn) return;
+  try{
+    const ctx = ac(), o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = "square"; o.frequency.value = 1300 + Math.random() * 300;
+    g.gain.setValueAtTime(0.06, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.03);
+    o.connect(g).connect(ctx.destination);
+    o.start(); o.stop(ctx.currentTime + 0.035);
+  }catch(e){}
+}
+function reveal(tier){
+  if (!soundOn) return;
+  try{
+    const ctx = ac();
+    const base = tier === "gold" ? 523 : tier === "covert" ? 440 : tier === "classified" ? 392 : 330;
+    [0, 4, 7, 12].forEach((st, i) => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = tier === "gold" ? "triangle" : "sine";
+      o.frequency.value = base * Math.pow(2, st / 12);
+      const t0 = ctx.currentTime + i * 0.09;
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(tier === "milspec" ? 0.08 : 0.14, t0 + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.7);
+      o.connect(g).connect(ctx.destination);
+      o.start(t0); o.stop(t0 + 0.75);
+    });
+  }catch(e){}
+}
+
+/* ============================ СОСТОЯНИЕ ================================= */
+const LS_KEY = "cs2_case_sim_v1";
+let state = {
+  balance: 5000, spent: 0, opened: 0, best: null,
+  inventory: [], selectedCase: CASES[0].id, fast: false,
+};
+try{
+  const saved = JSON.parse(localStorage.getItem(LS_KEY) || "null");
+  if (saved) state = { ...state, ...saved, selectedCase: saved.selectedCase || state.selectedCase };
+}catch(e){}
+function save(){ try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); }catch(e){} }
+
+function toast(msg){
+  const t = $("toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(t._tm); t._tm = setTimeout(() => t.classList.remove("show"), 2200);
+}
+
+/* ============================ ОТРИСОВКА ================================= */
+function renderCases(){
+  const box = $("caseList"); box.innerHTML = "";
+  for (const c of CASES){
+    const div = document.createElement("div");
+    div.className = "case" + (state.selectedCase === c.id ? " sel" : "");
+    const top = [...c.covert, ...c.gold].sort((a,b) => b.p - a.p)[0];
+    div.innerHTML = `<div class="crate">${c.icon}📦</div>
+      <div class="cn">${c.name}</div>
+      <div class="cm">${c.year} · топ: ${top.weapon} | ${top.skin}</div>
+      <div class="cp">Ключ: ${fmt(KEY_PRICE)}</div>`;
+    div.onclick = () => { state.selectedCase = c.id; save(); renderCases(); renderContents(); };
+    box.appendChild(div);
+  }
+}
+function selectedCase(){ return CASES.find(c => c.id === state.selectedCase); }
+
+function renderContents(){
+  const c = selectedCase();
+  const all = [...c.covert, ...c.classified, ...c.restricted, ...c.milspec];
+  $("caseContents").innerHTML =
+    `<b>${c.name}</b> — внутри ${all.length} скинов + редкий предмет (${c.gold[0].weapon.split(" ")[0]}…): ` +
+    all.slice(0, 4).map(i => `${i.weapon} | ${i.skin}`).join(" · ") + " · …";
+}
+
+function cellHTML(d){
+  const t = tierOf(d);
+  const st = d.stattrak ? '<span class="st">StatTrak™ </span>' : "";
+  return `<div class="cell" style="--rc:${t.color}">
+    <div class="art">${SVGS[d.w] || SVGS.rifle}</div>
+    <div class="nm">${st}${d.skin}<i>${d.weapon}</i></div>
+  </div>`;
+}
+
+function renderStats(){
+  $("balance").textContent = fmt(state.balance);
+  $("statOpened").textContent = state.opened;
+  $("statSpent").textContent = fmt(state.spent);
+  $("invValue").textContent = fmt(state.inventory.reduce((s, i) => s + i.price, 0));
+  $("statBest").textContent = state.best ? `${state.best.name} · ${fmt(state.best.price)}` : "—";
+  $("invCount").textContent = state.inventory.length ? `(${state.inventory.length} шт.)` : "";
+  $("btnSellAll").classList.toggle("hidden", !state.inventory.length);
+}
+
+function renderInventory(){
+  const box = $("inventory");
+  if (!state.inventory.length){
+    box.innerHTML = '<div class="empty">Пусто. Открой первый кейс!</div>';
+    return;
+  }
+  box.innerHTML = "";
+  const items = [...state.inventory].sort((a, b) => b.price - a.price);
+  for (const d of items){
+    const t = tierOf(d);
+    const div = document.createElement("div");
+    div.className = "item";
+    div.style.setProperty("--rc", t.color);
+    const wearLine = d.wearName ? `<i>${d.wearName}</i>` : `<i>★ Особый предмет</i>`;
+    div.innerHTML = `${artHTML(d, "art")}
+      <div class="nm">${d.stattrak ? '<span class="st">StatTrak™ </span>' : ""}${d.skin}<i>${d.weapon}</i>${wearLine}</div>
+      <div class="pr">${fmt(d.price)}</div>
+      <button class="btn small ghost">Продать</button>`;
+    div.querySelector("button").onclick = () => {
+      state.inventory = state.inventory.filter(x => x.id !== d.id);
+      state.balance += d.price;
+      toast(`Продано: ${itemName(d)} за ${fmt(d.price)}`);
+      save(); renderStats(); renderInventory();
+    };
+    box.appendChild(div);
+  }
+}
+
+/* ============================ РУЛЕТКА =================================== */
+const CELL_W = 160, WIN_INDEX = 50, CELLS = 60;
+let spinning = false;
+
+function buildReel(c, winner){
+  const reel = $("reel");
+  const pool = [...c.covert, ...c.classified, ...c.restricted, ...c.milspec];
+  let html = "";
+  for (let i = 0; i < CELLS; i++){
+    if (i === WIN_INDEX){
+      html += cellHTML(winner).replace('class="cell"', 'class="cell win-slot"');
+    } else {
+      const fake = { ...rnd(pool), stattrak: false, wear: null };
+      html += cellHTML(fake);
+    }
+  }
+  reel.innerHTML = html;
+  reel.style.transition = "none";
+  reel.style.transform = "translateX(0px)";
+}
+
+function spinTo(winner, cb){
+  const reel = $("reel");
+  const wrapW = reel.parentElement.clientWidth;
+  const jitter = (Math.random() - 0.5) * 100;
+  const target = WIN_INDEX * CELL_W + CELL_W / 2 - wrapW / 2 + jitter;
+  const duration = state.fast ? 900 : 6400;
+  const start = performance.now();
+  let lastIdx = -1;
+
+  function frame(now){
+    const p = Math.min(1, (now - start) / duration);
+    const ease = 1 - Math.pow(1 - p, 3);           // cubic ease-out
+    const x = target * ease;
+    reel.style.transform = `translateX(${-x}px)`;
+    const idx = Math.floor((x + wrapW / 2) / CELL_W);
+    if (idx !== lastIdx){ lastIdx = idx; if (p < 0.98) tick(); }
+    if (p < 1) requestAnimationFrame(frame);
+    else {
+      tick();
+      const winCell = reel.children[WIN_INDEX];
+      if (winCell) winCell.classList.add("win");
+      setTimeout(cb, state.fast ? 150 : 500);
+    }
+  }
+  requestAnimationFrame(frame);
+}
+
+function showResult(d){
+  const t = tierOf(d);
+  const banner = $("resultBanner");
+  banner.style.setProperty("--rc", t.color);
+  banner.classList.add("show");
+  $("rbArt").innerHTML = artHTML(d, "art").replace(/class="art"/, 'class="art"');
+  $("rbName").innerHTML = (d.stattrak ? '<span class="st">StatTrak™ </span>' : "") + itemName(d);
+  $("rbDesc").textContent = `${t.name}${d.wearName ? " · " + d.wearName : ""} · из кейса «${selectedCase().name}»`;
+  $("rbPrice").textContent = fmt(d.price);
+}
+
+async function openCase(){
+  if (spinning) return;
+  const c = selectedCase();
+  if (state.balance < KEY_PRICE){ toast("Не хватает денег на ключ. Продай что-нибудь из инвентаря!"); return; }
+
+  spinning = true;
+  $("btnOpen").disabled = true;
+  state.balance -= KEY_PRICE;
+  state.spent += KEY_PRICE;
+  state.opened += 1;
+
+  const drop = rollDrop(c);
+  state.inventory.push(drop);
+  if (!state.best || drop.price > state.best.price){
+    state.best = { name: itemName(drop), price: drop.price };
+  }
+  save(); renderStats();
+  buildReel(c, drop);
+
+  if (state.fast){
+    await new Promise(r => setTimeout(r, 60));
+  }
+  await new Promise(r => spinTo(drop, r));
+
+  reveal(drop.tier);
+  showResult(drop);
+  renderStats(); renderInventory();
+  spinning = false;
+  $("btnOpen").disabled = false;
+}
+
+/* ============================ СОБЫТИЯ =================================== */
+$("btnOpen").onclick = openCase;
+$("btnFast").onclick = () => {
+  state.fast = !state.fast;
+  $("fastState").textContent = state.fast ? "вкл" : "выкл";
+  save();
+};
+$("btnSellAll").onclick = () => {
+  const total = state.inventory.reduce((s, i) => s + i.price, 0);
+  state.balance += total;
+  state.inventory = [];
+  toast(`Инвентарь продан за ${fmt(total)}`);
+  save(); renderStats(); renderInventory();
+};
+$("btnReset").onclick = () => {
+  if (!confirm("Сбросить весь прогресс (баланс, инвентарь, статистику)?")) return;
+  state = { balance: 5000, spent: 0, opened: 0, best: null, inventory: [],
+            selectedCase: state.selectedCase, fast: state.fast };
+  save(); renderStats(); renderInventory();
+  $("resultBanner").classList.remove("show");
+  toast("Прогресс сброшен. Стартовый баланс: 5 000 ₽");
+};
+$("btnSound").onclick = () => {
+  soundOn = !soundOn;
+  $("btnSound").textContent = soundOn ? "🔊 Звук вкл" : "🔇 Звук выкл";
+};
+
+/* старт */
+$("fastState").textContent = state.fast ? "вкл" : "выкл";
+renderCases(); renderContents(); renderStats(); renderInventory();
+/* пустая лента-превью */
+(function(){
+  const c = selectedCase();
+  const pool = [...c.covert, ...c.classified, ...c.restricted, ...c.milspec];
+  let html = "";
+  for (let i = 0; i < 12; i++) html += cellHTML({ ...rnd(pool), stattrak: false, wear: null });
+  $("reel").innerHTML = html;
+})();
+</script>
+</body>
+</html>
