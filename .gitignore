@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+
+# Тесты и кэши
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Обученные веса (кроме демо-чекпоинта, добавляемого вручную)
+checkpoints/*.json
+!checkpoints/char_rnn.json
+
+# ОС
+.DS_Store

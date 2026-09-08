@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mybot"
+version = "0.1.0"
+description = "Нейросети на чистом Python: тензоры, автоград, слои, оптимизаторы, RNN"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+authors = [{ name = "DvornikovEgor" }]
+keywords = ["neural-network", "autograd", "deep-learning", "from-scratch", "education"]
+
+[project.scripts]
+mybot = "mybot.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["mybot*"]
+
+[tool.setuptools.package-data]
+mybot = ["data/*.txt"]
