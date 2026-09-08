@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Голосовой ИИ — синтез речи</title>
+<style>
+  :root{
+    --bg:#0e1117; --panel:#161b25; --panel2:#1d2432; --line:#2a3345;
+    --text:#e8ecf4; --muted:#8b96ab; --accent:#6c8cff; --accent2:#9a6cff;
+    --ok:#3ecf8e; --warn:#f5b64d; --err:#ff6b6b;
+    --radius:14px; font-size:15px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 600px at 80% -10%, #1b2440 0%, var(--bg) 55%);
+       color:var(--text);font-family:"Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;min-height:100vh}
+  header{display:flex;align-items:center;gap:14px;padding:22px 28px 6px}
+  .logo{font-size:30px}
+  h1{font-size:20px;margin:0;letter-spacing:.3px}
+  h1 span{background:linear-gradient(90deg,var(--accent),var(--accent2));
+          -webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{color:var(--muted);font-size:13px;margin-top:2px}
+  main{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:18px;
+       padding:16px 28px 40px;max-width:1240px;margin:0 auto}
+  @media (max-width:960px){main{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+        padding:18px;margin-bottom:16px}
+  .card h2{margin:0 0 12px;font-size:14px;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted)}
+  textarea{width:100%;min-height:150px;resize:vertical;background:var(--panel2);color:var(--text);
+           border:1px solid var(--line);border-radius:10px;padding:12px 14px;font:inherit;line-height:1.5}
+  textarea:focus{outline:none;border-color:var(--accent)}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .chip{background:var(--panel2);border:1px solid var(--line);border-radius:999px;
+        padding:6px 12px;font-size:12.5px;color:var(--muted);cursor:pointer;user-select:none}
+  .chip:hover{border-color:var(--accent);color:var(--text)}
+  .status{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
+  .badge{font-size:12px;padding:4px 10px;border-radius:999px;border:1px solid var(--line)}
+  .badge.ok{color:var(--ok);border-color:rgba(62,207,142,.4)}
+  .badge.warn{color:var(--warn);border-color:rgba(245,182,77,.4)}
+  .badge.err{color:var(--err);border-color:rgba(255,107,107,.4)}
+  button{font:inherit;border:none;border-radius:10px;cursor:pointer;padding:11px 20px}
+  .btn-primary{background:linear-gradient(90deg,var(--accent),var(--accent2));color:#fff;
+               font-weight:600;width:100%;padding:14px;font-size:16px}
+  .btn-primary:disabled{opacity:.55;cursor:wait}
+  .btn-ghost{background:var(--panel2);color:var(--text);border:1px solid var(--line);padding:8px 14px;font-size:13px}
+  .btn-ghost:hover{border-color:var(--accent)}
+  label.opt{display:flex;gap:8px;align-items:center;color:var(--muted);font-size:13.5px;cursor:pointer}
+  input[type=range]{accent-color:var(--accent);width:160px}
+  select,input[type=search]{background:var(--panel2);color:var(--text);border:1px solid var(--line);
+        border-radius:8px;padding:8px 10px;font:inherit}
+  .settings{display:flex;gap:22px;flex-wrap:wrap;margin:14px 0 4px;align-items:center}
+  .setting{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:13.5px}
+  .voices{display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:10px;max-height:420px;overflow:auto;padding-right:4px}
+  .voice{background:var(--panel2);border:1.5px solid var(--line);border-radius:12px;padding:12px;
+         cursor:pointer;transition:border-color .15s, transform .05s}
+  .voice:hover{border-color:#46536e}
+  .voice.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+  .voice .vn{font-weight:600;font-size:14.5px;display:flex;justify-content:space-between;gap:6px}
+  .voice .vd{color:var(--muted);font-size:12.5px;margin-top:4px;line-height:1.35}
+  .voice .ve{margin-top:8px;font-size:11px;color:var(--muted);opacity:.8}
+  .gender{font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:1px 8px;white-space:nowrap}
+  .hidden{display:none!important}
+  .banner{border:1px solid rgba(245,182,77,.5);background:rgba(245,182,77,.08);border-radius:12px;
+          padding:14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  .banner p{margin:0;font-size:13.5px;color:#f0d9a8}
+  .progress{height:8px;background:var(--panel2);border-radius:999px;overflow:hidden;flex:1;min-width:120px}
+  .progress i{display:block;height:100%;width:0%;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .4s}
+  .result audio{width:100%}
+  .meta{color:var(--muted);font-size:12.5px;margin-top:8px}
+  .history-item{display:flex;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
+  .history-item:first-of-type{border-top:none}
+  .history-item .ht{flex:1;min-width:0}
+  .history-item .ht .t{font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .history-item .ht .m{font-size:11.5px;color:var(--muted);margin-top:2px}
+  .spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.35);
+           border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite;vertical-align:-2px;margin-right:8px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .error{color:var(--err);font-size:13.5px;margin-top:10px}
+  .counter{color:var(--muted);font-size:12px;text-align:right;margin-top:6px}
+  a{color:var(--accent)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🎙️</div>
+  <div>
+    <h1>Голосовой <span>ИИ</span> — фабрика голосов</h1>
+    <div class="sub">Напишите текст — нейросеть озвучит его любым голосом. Работает офлайн и в облаке.</div>
+  </div>
+  <div class="status" id="engines"></div>
+</header>
+
+<main>
+  <section>
+    <div class="card">
+      <h2>1 · Текст</h2>
+      <textarea id="text" maxlength="2000" placeholder="Введите текст, который нужно озвучить…">Привет! Я искусственный интеллект, и я умею делать голоса. Напишите любой текст — и я превращу его в живую речь.</textarea>
+      <div class="counter"><span id="count">0</span> / 2000</div>
+      <div class="chips" id="examples"></div>
+    </div>
+
+    <div class="card" id="modelBanner" style="display:none">
+      <div class="banner">
+        <p>⚠️ Нейромодель <b>Silero</b> ещё не скачана — без неё офлайн-голоса недоступны.</p>
+        <button class="btn-ghost" id="btnDownload">Скачать модель (~40 МБ)</button>
+        <div class="progress hidden" id="dlProgress"><i></i></div>
+        <span class="meta" id="dlStatus"></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>3 · Результат</h2>
+      <div id="resultEmpty" class="meta">Здесь появится аудиофайл. Выберите голос и нажмите «Озвучить».</div>
+      <div id="result" class="result hidden">
+        <audio id="player" controls></audio>
+        <div class="row" style="margin-top:10px">
+          <a id="downloadLink" class="btn-ghost" download style="text-decoration:none">⬇ Скачать файл</a>
+          <span class="meta" id="resultMeta"></span>
+        </div>
+      </div>
+      <div class="error hidden" id="sayError"></div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <h2 style="margin:0">История озвучек</h2>
+        <button class="btn-ghost" id="btnClearHistory">Очистить</button>
+      </div>
+      <div id="history" class="meta">Пусто.</div>
+    </div>
+  </section>
+
+  <section>
+    <div class="card">
+      <h2>2 · Голос</h2>
+      <input type="search" id="voiceSearch" class="hidden" placeholder="Поиск голоса…" style="width:100%;margin-bottom:10px">
+      <div class="voices" id="voices"></div>
+    </div>
+
+    <div class="card">
+      <h2>Настройки</h2>
+      <div class="settings">
+        <div class="setting">Скорость
+          <input type="range" id="speed" min="0.5" max="1.5" step="0.05" value="1">
+          <b id="speedVal" style="color:var(--text)">1.00×</b>
+        </div>
+        <div class="setting">Частота
+          <select id="sampleRate"><option value="48000">48 кГц</option><option value="24000">24 кГц</option></select>
+        </div>
+      </div>
+      <div class="settings" id="sileroOpts">
+        <label class="opt"><input type="checkbox" id="putAccent" checked> ставить ударения</label>
+        <label class="opt"><input type="checkbox" id="putYo" checked> произносить «ё»</label>
+      </div>
+      <button class="btn-primary" id="btnSay" disabled>🎙 Озвучить</button>
+      <div class="error hidden" id="voicesError"></div>
+    </div>
+  </section>
+</main>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const state = { voices: [], selected: null };
+
+const EXAMPLES = [
+  "Съешь же ещё этих мягких французских булок, да выпей чаю.",
+  "В недрах тундры выдры в гетрах тырят в вёдра ядра кедров.",
+  "Искусственный интеллект уже здесь: он читает, пишет и даже говорит.",
+  "Дорогие друзья! Поздравляю вас с праздником — пусть всё получится!",
+];
+
+function renderEngines(engines){
+  const box = $("engines"); box.innerHTML = "";
+  for (const e of engines){
+    const b = document.createElement("span");
+    const cls = e.available ? "ok" : (e.needs_model ? "warn" : "err");
+    const icon = e.available ? "●" : (e.needs_model ? "⬇" : "○");
+    b.className = "badge " + cls;
+    b.textContent = `${icon} ${e.title}`;
+    if (!e.available) b.title = e.why_not || "";
+    box.appendChild(b);
+  }
+}
+
+async function loadStatus(){
+  try{
+    const s = await (await fetch("/api/status")).json();
+    renderEngines(s.engines);
+    const silero = s.engines.find(e => e.id === "silero");
+    const needBanner = silero && silero.needs_model;
+    $("modelBanner").style.display = needBanner ? "" : "none";
+    if (s.model_job && s.model_job.state === "working") pollDownload();
+    return s;
+  }catch(err){ console.error(err); return null; }
+}
+
+async function loadVoices(){
+  try{
+    const data = await (await fetch("/api/voices")).json();
+    state.voices = data.voices;
+    $("voiceSearch").classList.toggle("hidden", data.voices.length <= 12);
+    renderVoices();
+    if (!data.voices.length){
+      $("voicesError").textContent = "Нет доступных голосов. Скачайте модель или проверьте интернет.";
+      $("voicesError").classList.remove("hidden");
+    }
+  }catch(err){
+    $("voicesError").textContent = "Не удалось загрузить список голосов: " + err;
+    $("voicesError").classList.remove("hidden");
+  }
+}
+
+function renderVoices(){
+  const filter = ($("voiceSearch").value || "").trim().toLowerCase();
+  const box = $("voices"); box.innerHTML = "";
+  const order = { silero: 0, edge: 1 };
+  const list = [...state.voices]
+    .filter(v => !filter ||
+      (v.name + " " + v.id + " " + v.description).toLowerCase().includes(filter))
+    .sort((a,b) => (order[a.engine]??9) - (order[b.engine]??9) || a.name.localeCompare(b.name,"ru"));
+  for (const v of list){
+    const div = document.createElement("div");
+    div.className = "voice" + (state.selected === `${v.engine}/${v.id}` ? " sel" : "");
+    div.innerHTML = `
+      <div class="vn"><span>${v.name}</span><span class="gender">${v.gender || v.lang}</span></div>
+      <div class="vd">${v.description || ""}</div>
+      <div class="ve">${v.engine_title}</div>`;
+    div.onclick = () => { state.selected = `${v.engine}/${v.id}`; renderVoices(); };
+    box.appendChild(div);
+  }
+  if (!state.selected && list.length){
+    state.selected = `${list[0].engine}/${list[0].id}`;
+    const first = box.querySelector(".voice");
+    if (first) first.classList.add("sel");
+  }
+  $("btnSay").disabled = !state.selected;
+  const isSilero = state.selected && state.selected.startsWith("silero/");
+  $("sileroOpts").style.display = isSilero || !state.selected ? "" : "none";
+  $("sampleRate").disabled = !isSilero;
+}
+
+async function say(){
+  const text = $("text").value.trim();
+  $("sayError").classList.add("hidden");
+  if (!text){ $("sayError").textContent = "Введите текст."; $("sayError").classList.remove("hidden"); return; }
+  if (!state.selected){ return; }
+
+  const btn = $("btnSay");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Нейросеть говорит…';
+
+  try{
+    const res = await fetch("/api/say", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        text,
+        voice: state.selected,
+        speed: parseFloat($("speed").value),
+        sample_rate: parseInt($("sampleRate").value, 10),
+        put_accent: $("putAccent").checked,
+        put_yo: $("putYo").checked,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok){ throw new Error(data.error || ("Ошибка " + res.status)); }
+    $("resultEmpty").classList.add("hidden");
+    $("result").classList.remove("hidden");
+    const player = $("player");
+    player.src = data.url + "?t=" + Date.now();
+    player.play().catch(()=>{});
+    $("downloadLink").href = data.url;
+    $("downloadLink").download = data.file;
+    $("resultMeta").textContent =
+      `${data.voice_name} · ${data.seconds ?? "?"} c аудио · синтез ${data.synth_ms} мс`;
+    loadHistory();
+  }catch(err){
+    $("sayError").textContent = "⚠ " + err.message;
+    $("sayError").classList.remove("hidden");
+  }finally{
+    btn.disabled = false;
+    btn.textContent = "🎙 Озвучить";
+  }
+}
+
+async function loadHistory(){
+  const data = await (await fetch("/api/history")).json();
+  const box = $("history");
+  if (!data.items.length){ box.innerHTML = '<span class="meta">Пусто.</span>'; return; }
+  box.innerHTML = "";
+  for (const item of data.items){
+    const div = document.createElement("div");
+    div.className = "history-item";
+    div.innerHTML = `
+      <div class="ht">
+        <div class="t"></div>
+        <div class="m">${item.voice_name} · ${item.ts} · ${item.seconds ?? "?"} c</div>
+      </div>
+      <button class="btn-ghost">▶ Послушать</button>
+      <a class="btn-ghost" href="${item.url}" download="${item.file}" style="text-decoration:none">⬇</a>`;
+    div.querySelector(".t").textContent = item.text;
+    div.querySelector("button").onclick = () => {
+      const p = $("player");
+      $("resultEmpty").classList.add("hidden");
+      $("result").classList.remove("hidden");
+      p.src = item.url; p.play().catch(()=>{});
+      $("downloadLink").href = item.url; $("downloadLink").download = item.file;
+      $("resultMeta").textContent = `${item.voice_name} · из истории`;
+    };
+    box.appendChild(div);
+  }
+}
+
+function pollDownload(){
+  $("btnDownload").classList.add("hidden");
+  $("dlProgress").classList.remove("hidden");
+  const tick = setInterval(async () => {
+    try{
+      const s = await (await fetch("/api/models/status")).json();
+      $("dlProgress").firstElementChild.style.width = (s.progress || 0) + "%";
+      $("dlStatus").textContent = `${s.message || ""} ${s.progress ? s.progress + "%" : ""}`;
+      if (s.state === "done" || s.state === "error"){
+        clearInterval(tick);
+        if (s.state === "done"){
+          $("modelBanner").style.display = "none";
+          await loadStatus(); await loadVoices();
+        } else {
+          $("dlStatus").textContent = "Ошибка: " + s.message;
+          $("btnDownload").classList.remove("hidden");
+        }
+      }
+    }catch(e){ /* опрашиваем дальше */ }
+  }, 1200);
+}
+
+// --- инициализация ---
+$("text").addEventListener("input", () => $("count").textContent = $("text").value.length);
+$("count").textContent = $("text").value.length;
+EXAMPLES.forEach(ex => {
+  const c = document.createElement("span");
+  c.className = "chip"; c.textContent = ex.slice(0, 34) + "…";
+  c.title = ex;
+  c.onclick = () => { $("text").value = ex; $("count").textContent = ex.length; };
+  $("examples").appendChild(c);
+});
+$("speed").addEventListener("input", () => $("speedVal").textContent = (+$("speed").value).toFixed(2) + "×");
+$("voiceSearch").addEventListener("input", renderVoices);
+$("btnSay").addEventListener("click", say);
+$("btnDownload").addEventListener("click", async () => {
+  await fetch("/api/models/download", {method: "POST"});
+  pollDownload();
+});
+$("btnClearHistory").addEventListener("click", async () => {
+  await fetch("/api/history/clear", {method: "POST"});
+  loadHistory();
+});
+
+(async function init(){
+  await loadStatus();
+  await loadVoices();
+  await loadHistory();
+})();
+</script>
+</body>
+</html>

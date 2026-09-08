@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Модель нейросети скачивается отдельно (см. python app.py download-models)
+models/*.pt
+models/*.part
+
+# Сгенерированные аудиофайлы
+outputs/
+
+# Служебное
+*.log
