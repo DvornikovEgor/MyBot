@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# Данные и обученные артефакты (генерируются локально)
+data/*.gz
+data/*.idx-ubyte
+models/*.npz
+outputs/*.png
+
+# ОС и редакторы
+.DS_Store
+.idea/
+.vscode/
+
+# Кэш датасета
+data/*.npz

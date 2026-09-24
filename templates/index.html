@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MyBot AI — распознавание цифр</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <h1>🤖 MyBot <span>AI</span></h1>
+    <p class="subtitle">Нейросеть, написанная с нуля на NumPy — без PyTorch и TensorFlow</p>
+  </header>
+
+  <main>
+    <section class="panel draw-panel">
+      <h2>Нарисуйте цифру 0–9</h2>
+      <div class="canvas-wrap">
+        <canvas id="pad" width="280" height="280"></canvas>
+        <div id="prediction-badge" class="badge hidden">?</div>
+      </div>
+      <div class="btn-row">
+        <button id="btn-clear" class="btn ghost">Очистить</button>
+        <button id="btn-sample" class="btn ghost">Пример из датасета</button>
+      </div>
+      <p class="hint">Совет: рисуйте крупно, в центре холста.</p>
+    </section>
+
+    <section class="panel result-panel">
+      <h2>Что видит модель</h2>
+      <div class="result-grid">
+        <div class="mini-wrap">
+          <canvas id="mini" width="96" height="96"></canvas>
+          <span class="mini-label">вход 8×8</span>
+        </div>
+        <div class="bars" id="bars"></div>
+      </div>
+      <div id="confidence" class="confidence"></div>
+      <div id="sample-info" class="sample-info hidden"></div>
+    </section>
+  </main>
+
+  <section class="panel chat-panel" id="chat-panel">
+    <h2>💬 ИИ-ассистент <span id="chat-status" class="tag"></span></h2>
+    <div id="chat-log" class="chat-log">
+      <div class="msg bot">Привет! Я умею объяснять, как устроена нейросеть MyBot.
+      {% if llm_ready %}Спросите что-нибудь!{% else %}Для работы мне нужен API-ключ: задайте переменную окружения <code>LLM_API_KEY</code> и перезапустите сервер.{% endif %}</div>
+    </div>
+    <form id="chat-form" class="chat-form">
+      <input id="chat-input" type="text" placeholder="{% if llm_ready %}Спросите про нейросети…{% else %}Ассистент выключен (нет ключа){% endif %}"
+             {% if not llm_ready %}disabled{% endif %} autocomplete="off">
+      <button type="submit" class="btn" {% if not llm_ready %}disabled{% endif %}>Отправить</button>
+    </form>
+  </section>
+
+  <footer>
+    <p>Полносвязная сеть 64→128→64→10 · Adam · backprop с нуля ·
+       код: <code>src/nn.py</code> · обучение: <code>python -m src.train</code></p>
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
