@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MyBot · Генератор музыки</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='5' y='12' width='4' height='12' rx='2' fill='%238b5cf6'/%3E%3Crect x='12' y='6' width='4' height='18' rx='2' fill='%2322d3ee'/%3E%3Crect x='19' y='10' width='4' height='14' rx='2' fill='%23e879f9'/%3E%3Crect x='26' y='3' width='0' height='0'/%3E%3C/svg%3E">
+</head>
+<body>
+  <div class="bg-orbs" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <div class="logo">
+      <div class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+      <div>
+        <h1>Генератор музыки</h1>
+        <p class="sub">MyBot · алгоритмическая композиция и синтез в браузере</p>
+      </div>
+    </div>
+    <p class="hint">Space — пуск/пауза · G — новая генерация</p>
+  </header>
+
+  <main class="layout">
+    <!-- ============ controls ============ -->
+    <aside class="panel controls">
+      <h2>Параметры</h2>
+
+      <label class="field">
+        <span>Стиль</span>
+        <select id="style">
+          <option value="lofi" selected>Lo-fi</option>
+          <option value="synthwave">Synthwave</option>
+          <option value="ambient">Эмбиент</option>
+          <option value="techno">Техно</option>
+          <option value="chiptune">Chiptune</option>
+          <option value="classical">Классика</option>
+        </select>
+      </label>
+
+      <label class="field">
+        <span>Настроение</span>
+        <select id="mood">
+          <option value="dreamy" selected>Мечтательное</option>
+          <option value="happy">Радостное</option>
+          <option value="sad">Грустное</option>
+          <option value="dark">Тёмное</option>
+          <option value="epic">Эпичное</option>
+        </select>
+      </label>
+
+      <label class="field">
+        <span>Длина трека</span>
+        <select id="duration">
+          <option value="30">~30 секунд</option>
+          <option value="60" selected>~1 минута</option>
+          <option value="90">~1,5 минуты</option>
+          <option value="120">~2 минуты</option>
+        </select>
+      </label>
+
+      <label class="field">
+        <span>Тональность</span>
+        <select id="key">
+          <option value="rand" selected>Случайная</option>
+          <option value="0">До</option>
+          <option value="1">До#</option>
+          <option value="2">Ре</option>
+          <option value="3">Ре#</option>
+          <option value="4">Ми</option>
+          <option value="5">Фа</option>
+          <option value="6">Фа#</option>
+          <option value="7">Соль</option>
+          <option value="8">Соль#</option>
+          <option value="9">Ля</option>
+          <option value="10">Ля#</option>
+          <option value="11">Си</option>
+        </select>
+      </label>
+
+      <div class="field">
+        <span>Темп <em id="bpmVal">авто</em></span>
+        <div class="bpm-row">
+          <input type="range" id="bpm" min="55" max="160" step="1" value="92">
+          <label class="check"><input type="checkbox" id="bpmAuto" checked><i></i>авто</label>
+        </div>
+      </div>
+
+      <div class="field">
+        <span>Сид</span>
+        <div class="seed-row">
+          <input type="text" id="seed" inputmode="numeric" maxlength="40" spellcheck="false">
+          <button id="randomSeed" class="icon-btn" title="Случайный сид и новая генерация">🎲</button>
+        </div>
+        <small>Один и сид = одна и та же музыка. Делитесь ссылкой!</small>
+      </div>
+
+      <button id="generate" class="primary">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+        Сгенерировать
+      </button>
+
+      <div class="meta-block">
+        <p id="meta" class="meta">…</p>
+        <p id="structure" class="meta dim"></p>
+        <p id="chords" class="meta chords"></p>
+      </div>
+    </aside>
+
+    <!-- ============ player ============ -->
+    <section class="stage">
+      <div class="panel vis-panel">
+        <canvas id="vis"></canvas>
+      </div>
+
+      <div class="panel transport">
+        <div class="t-left">
+          <button id="playBtn" class="play-btn" disabled aria-label="Играть / пауза">
+            <svg id="playIcon" viewBox="0 0 24 24" width="26" height="26" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>
+            <svg id="pauseIcon" viewBox="0 0 24 24" width="26" height="26" fill="currentColor" style="display:none"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>
+          </button>
+          <button id="stopBtn" class="icon-btn" disabled aria-label="Стоп">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+          </button>
+          <button id="loopBtn" class="icon-btn active" aria-label="Повтор" title="Зациклить">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>
+          </button>
+          <span class="time"><b id="timeCur">0:00</b> / <span id="timeTot">0:00</span></span>
+        </div>
+
+        <div class="t-center">
+          <div id="progress" class="progress"><div id="progressFill"></div></div>
+        </div>
+
+        <div class="t-right">
+          <label class="vol">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16 8a5 5 0 0 1 0 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <input type="range" id="volume" min="0.1" max="1" step="0.01" value="0.85">
+          </label>
+          <button id="download" class="ghost" disabled>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v12"/><path d="M7 11l5 5 5-5"/><path d="M4 21h16"/></svg>
+            WAV
+          </button>
+        </div>
+      </div>
+
+      <div class="panel roll-panel">
+        <div class="roll-head">
+          <h2>Фортепианный ролл</h2>
+          <div class="legend">
+            <span><i style="background:#a78bfa"></i>мелодия</span>
+            <span><i style="background:#38bdf8"></i>подложка</span>
+            <span><i style="background:#34d399"></i>аккорды</span>
+            <span><i style="background:#fbbf24"></i>бас</span>
+            <span><i style="background:#f472b6"></i>арпеджио</span>
+            <span><i style="background:#fb7185"></i>барабаны</span>
+          </div>
+        </div>
+        <canvas id="roll"></canvas>
+      </div>
+
+      <p id="status" class="status">Загружаю…</p>
+      <p class="about">Музыка сочиняется алгоритмически: гармония, мелодия, бас, арпеджио и ударные,
+        а звук синтезируется через Web Audio API — прямо в браузере, без внешних сервисов.</p>
+    </section>
+  </main>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
