@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>КВАК СРЕДИ НАС — Among Us с лягушками</title>
+<link rel="stylesheet" href="styles.css" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='18' r='11' fill='%234caf50'/%3E%3Ccircle cx='11' cy='9' r='5' fill='%23fff'/%3E%3Ccircle cx='21' cy='9' r='5' fill='%23fff'/%3E%3Ccircle cx='11' cy='10' r='2.4' fill='%23222'/%3E%3Ccircle cx='21' cy='10' r='2.4' fill='%23222'/%3E%3C/svg%3E" />
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<!-- ───────────────────────── МЕНЮ ───────────────────────── -->
+<div id="menu" class="overlay">
+  <div class="menu-card">
+    <canvas id="menu-frog" width="150" height="150"></canvas>
+    <h1>КВАК <span>СРЕДИ НАС</span></h1>
+    <p class="subtitle">Пруд. Десять лягушек в скафандрах. Одна из них — не та, за кого себя выдаёт.</p>
+
+    <div class="settings">
+      <label>
+        Ваше имя
+        <input id="opt-name" type="text" maxlength="12" value="Квакс" />
+      </label>
+      <label>
+        Лягушек в пруду
+        <select id="opt-players">
+          <option value="6">6</option>
+          <option value="8">8</option>
+          <option value="10" selected>10</option>
+          <option value="12">12</option>
+        </select>
+      </label>
+      <label>
+        Самозванцев
+        <select id="opt-impostors">
+          <option value="1" selected>1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+        </select>
+      </label>
+      <label>
+        Заданий на лягушку
+        <select id="opt-tasks">
+          <option value="3">3</option>
+          <option value="4">4</option>
+          <option value="5" selected>5</option>
+          <option value="6">6</option>
+        </select>
+      </label>
+    </div>
+
+    <button id="btn-start" class="big-btn">В ПРУД!</button>
+
+    <div class="hint">
+      <b>Управление:</b> WASD / стрелки или зажать мышью · <b>E</b> — задание ·
+      <b>R</b> — сообщить о трупе · <b>Q</b> — убить · <b>V</b> — нора ·
+      <b>G</b> — экстренный сбор · <b>X</b> — саботаж · <b>Esc</b> — пауза
+    </div>
+  </div>
+</div>
+
+<!-- ───────────────────── РАСКРЫТИЕ РОЛИ ───────────────────── -->
+<div id="reveal" class="overlay hidden">
+  <div id="reveal-card" class="reveal-card">
+    <canvas id="reveal-frog" width="180" height="180"></canvas>
+    <h2 id="reveal-title"></h2>
+    <p id="reveal-text"></p>
+  </div>
+</div>
+
+<!-- ─────────────────────────── HUD ─────────────────────────── -->
+<div id="hud" class="hidden">
+  <div id="tasks-panel">
+    <div class="panel-title" id="tasks-title">Задания пруда</div>
+    <div id="task-bar"><div id="task-bar-fill"></div></div>
+    <ul id="task-list"></ul>
+  </div>
+
+  <div id="sabotage-banner" class="hidden"></div>
+
+  <div id="toast-wrap"></div>
+
+  <div id="role-badge"></div>
+
+  <div id="action-bar">
+    <button class="act" data-act="use" id="btn-use"><span class="key">E</span>Использовать</button>
+    <button class="act" data-act="report" id="btn-report"><span class="key">R</span>Сообщить</button>
+    <button class="act danger" data-act="kill" id="btn-kill"><span class="key">Q</span>Убить</button>
+    <button class="act danger" data-act="vent" id="btn-vent"><span class="key">V</span>Нора</button>
+    <button class="act danger" data-act="sabotage" id="btn-sabotage"><span class="key">X</span>Саботаж</button>
+    <button class="act warn" data-act="emergency" id="btn-emergency"><span class="key">G</span>Собрать всех</button>
+  </div>
+
+  <div id="sabotage-menu" class="hidden">
+    <button data-sab="fog">🌫️ Туман над прудом</button>
+    <button data-sab="comms">📡 Глушить квак-связь</button>
+  </div>
+
+  <button id="btn-pause" title="Пауза (Esc)">⏸</button>
+</div>
+
+<!-- ──────────────────────── СОБРАНИЕ ──────────────────────── -->
+<div id="meeting" class="overlay hidden">
+  <div class="meeting-card">
+    <h2 id="meeting-title"></h2>
+    <p id="meeting-sub"></p>
+    <div id="meeting-timer"><div id="meeting-timer-fill"></div></div>
+    <div id="vote-grid"></div>
+    <div class="meeting-foot">
+      <span id="vote-status"></span>
+      <button id="btn-skip">Пропустить обсуждение</button>
+    </div>
+  </div>
+</div>
+
+<!-- ──────────────────────── ВЫБРОС ──────────────────────── -->
+<div id="eject" class="overlay hidden">
+  <div class="eject-inner">
+    <canvas id="eject-frog" width="120" height="120"></canvas>
+    <p id="eject-text"></p>
+  </div>
+</div>
+
+<!-- ───────────────────────── ПАУЗА ───────────────────────── -->
+<div id="pause" class="overlay hidden">
+  <div class="menu-card small">
+    <h2>Пауза</h2>
+    <label class="row"><input type="checkbox" id="opt-sound" checked /> Звук</label>
+    <div class="hint" id="pause-info"></div>
+    <button id="btn-resume" class="big-btn">Продолжить</button>
+    <button id="btn-quit" class="ghost-btn">Выйти в меню</button>
+  </div>
+</div>
+
+<!-- ───────────────────────── ФИНАЛ ───────────────────────── -->
+<div id="end" class="overlay hidden">
+  <div class="menu-card small">
+    <h2 id="end-title"></h2>
+    <p id="end-reason"></p>
+    <div id="end-impostors"></div>
+    <div id="end-stats" class="hint"></div>
+    <button id="btn-again" class="big-btn">Ещё раз</button>
+    <button id="btn-menu" class="ghost-btn">В меню</button>
+  </div>
+</div>
+
+<script type="module" src="js/client/main.js"></script>
+</body>
+</html>

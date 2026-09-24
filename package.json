@@ -1,0 +1,12 @@
+{
+  "name": "kvak-sredi-nas",
+  "version": "1.0.0",
+  "private": true,
+  "description": "«КВАК СРЕДИ НАС» — Among Us с лягушками (браузерная игра на canvas)",
+  "type": "module",
+  "scripts": {
+    "start": "python3 -m http.server 8000 --bind 0.0.0.0",
+    "test": "node --test"
+  },
+  "license": "MIT"
+}
