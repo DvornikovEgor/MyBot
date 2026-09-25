@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MyBot · ИИ генератор картинок</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/images.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='5' width='26' height='22' rx='4' fill='%2316193a' stroke='%238b5cf6' stroke-width='2'/%3E%3Ccircle cx='11' cy='13' r='3' fill='%2322d3ee'/%3E%3Cpath d='M5 23l6-6 4 4 4-5 8 7z' fill='%23e879f9'/%3E%3C/svg%3E">
+</head>
+<body>
+  <div class="bg-orbs" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <div class="logo">
+      <div class="eq eq-static" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+      <div>
+        <h1>ИИ генератор картинок</h1>
+        <p class="sub">MyBot · текст → картинка за секунды, бесплатно и без регистрации</p>
+      </div>
+    </div>
+    <nav class="nav">
+      <a href="index.html" class="nav-link">🎵 Музыка</a>
+      <a href="images.html" class="nav-link active">🎨 Картинки</a>
+    </nav>
+  </header>
+  <p class="hint hint-center">Ctrl + Enter — сгенерировать · клик по картинке — открыть на весь экран</p>
+
+  <main class="layout layout-images">
+    <!-- ============ controls ============ -->
+    <aside class="panel controls">
+      <h2>Параметры</h2>
+
+      <div class="field">
+        <span>Описание картинки <em id="charCount">0</em></span>
+        <textarea id="prompt" rows="4" maxlength="1000" spellcheck="true"
+          placeholder="Например: замок на летающем острове в облаках на закате, водопады, птицы…"></textarea>
+        <div class="prompt-actions">
+          <button id="surprise" class="mini-btn" title="Случайная идея">🎲 Мне повезёт</button>
+          <button id="clearPrompt" class="mini-btn" title="Очистить">✕ Очистить</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <span>Идеи для старта</span>
+        <div id="chips" class="chips"></div>
+      </div>
+
+      <label class="field">
+        <span>Стиль</span>
+        <select id="style">
+          <option value="none" selected>Без стиля (как написано)</option>
+          <option value="photo">📷 Фотореализм</option>
+          <option value="cinematic">🎬 Кинокадр</option>
+          <option value="anime">🌸 Аниме</option>
+          <option value="cyberpunk">🌃 Киберпанк</option>
+          <option value="fantasy">🐉 Фэнтези-арт</option>
+          <option value="scifi">🚀 Sci-Fi</option>
+          <option value="watercolor">🎨 Акварель</option>
+          <option value="oil">🖼️ Масляная живопись</option>
+          <option value="3d">🧊 3D-рендер</option>
+          <option value="pixel">👾 Пиксель-арт</option>
+          <option value="comic">💥 Комикс</option>
+          <option value="logo">✨ Минимализм / лого</option>
+        </select>
+      </label>
+
+      <div class="grid2">
+        <label class="field">
+          <span>Модель</span>
+          <select id="model">
+            <option value="flux" selected>Flux — качество</option>
+            <option value="turbo">Turbo — скорость</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Размер</span>
+          <select id="size">
+            <option value="1024x1024" selected>⬛ Квадрат 1024</option>
+            <option value="1280x720">🖥️ Пейзаж 16:9</option>
+            <option value="720x1280">📱 Портрет 9:16</option>
+            <option value="1024x768">📐 Пейзаж 4:3</option>
+            <option value="768x1024">📐 Портрет 3:4</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="grid2">
+        <label class="field">
+          <span>Вариантов: <em id="countVal">2</em></span>
+          <input type="range" id="count" min="1" max="4" step="1" value="2">
+        </label>
+        <div class="field">
+          <span>Сид</span>
+          <div class="seed-row">
+            <input type="text" id="seed" inputmode="numeric" maxlength="12" spellcheck="false">
+            <button id="randomSeed" class="icon-btn" title="Случайный сид">🎲</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="toggles">
+        <label class="check"><input type="checkbox" id="enhance" checked><i></i>✨ Улучшить промпт (ИИ)</label>
+        <label class="check"><input type="checkbox" id="private" checked><i></i>🔒 Приватно</label>
+      </div>
+
+      <button id="generate" class="primary">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+        Сгенерировать
+      </button>
+
+      <div class="meta-block">
+        <p id="meta" class="meta">Опишите картинку и нажмите «Сгенерировать».</p>
+        <p id="fullPrompt" class="meta dim mono"></p>
+      </div>
+    </aside>
+
+    <!-- ============ stage ============ -->
+    <section class="stage">
+      <div class="panel preview-panel">
+        <div id="previewWrap" class="preview-wrap empty">
+          <div id="previewEmpty" class="preview-empty">
+            <div class="preview-empty-art">🎨</div>
+            <p>Здесь появится ваша картинка</p>
+            <small>Генерация занимает обычно 10–30 секунд</small>
+          </div>
+          <img id="preview" alt="Сгенерированная картинка" hidden>
+          <div id="previewLoader" class="preview-loader" hidden>
+            <div class="spinner"></div>
+            <p id="loaderText">Рисую… 0 с</p>
+            <div class="loadbar"><div id="loadbarFill"></div></div>
+          </div>
+        </div>
+        <div class="preview-bar">
+          <p id="previewCaption" class="preview-caption">—</p>
+          <div class="preview-btns">
+            <button id="openFull" class="ghost" disabled>⛶ Открыть</button>
+            <button id="download" class="ghost" disabled>
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v12"/><path d="M7 11l5 5 5-5"/><path d="M4 21h16"/></svg>
+              Скачать
+            </button>
+            <button id="copyLink" class="ghost" disabled>🔗 Ссылка</button>
+            <button id="reuse" class="ghost" disabled>↻ Повторить</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel gallery-panel">
+        <div class="roll-head">
+          <h2>Результаты <span id="galleryCount" class="count-badge">0</span></h2>
+          <div class="gallery-actions">
+            <button id="downloadAll" class="mini-btn" disabled>⬇ Скачать все</button>
+            <button id="clearHistory" class="mini-btn danger" disabled>🗑 Очистить</button>
+          </div>
+        </div>
+        <div id="gallery" class="gallery">
+          <p id="galleryEmpty" class="gallery-empty">Пока пусто — сгенерируйте первую картинку ✨</p>
+        </div>
+      </div>
+
+      <p id="status" class="status"></p>
+      <p class="about">Картинки создаёт бесплатная нейросеть Flux через Pollinations.ai — без регистрации и ключей.
+        Один и тот же промпт + сид = одна и та же картинка. Контент генерируется на внешнем сервисе, нужен интернет.</p>
+    </section>
+  </main>
+
+  <!-- fullscreen viewer -->
+  <div id="viewer" class="viewer" hidden>
+    <button id="viewerClose" class="viewer-close" aria-label="Закрыть">✕</button>
+    <button id="viewerPrev" class="viewer-nav" aria-label="Назад">‹</button>
+    <img id="viewerImg" alt="Просмотр картинки">
+    <button id="viewerNext" class="viewer-nav" aria-label="Вперёд">›</button>
+    <p id="viewerCaption" class="viewer-caption"></p>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script type="module" src="js/images.js"></script>
+</body>
+</html>

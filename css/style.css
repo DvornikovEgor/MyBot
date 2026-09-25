@@ -75,6 +75,37 @@ body {
   margin: 0;
 }
 
+/* ---------- nav ---------- */
+.nav {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.nav-link {
+  padding: 9px 18px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  color: var(--dim);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.15s;
+}
+
+.nav-link:hover {
+  color: var(--text);
+  background: rgba(139, 92, 246, 0.15);
+}
+
+.nav-link.active {
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent), #6d28d9);
+  border-color: transparent;
+  box-shadow: 0 6px 20px rgba(139, 92, 246, 0.35);
+}
+
 /* animated equalizer logo */
 .eq {
   display: flex;

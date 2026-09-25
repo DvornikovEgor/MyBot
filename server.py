@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tiny static server for the MyBot music generator."""
+"""Tiny static server for MyBot (music + AI image generators)."""
 import http.server
 import os
 import socketserver
@@ -30,5 +30,5 @@ socketserver.TCPServer.allow_reuse_address = True
 
 if __name__ == "__main__":
     with socketserver.TCPServer(("0.0.0.0", PORT), Handler) as httpd:
-        print(f"MyBot music generator → http://0.0.0.0:{PORT}")
+        print(f"MyBot (music + images) → http://0.0.0.0:{PORT}  (images: /images.html)")
         httpd.serve_forever()
