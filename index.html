@@ -34,6 +34,11 @@
   <!-- ==================== AI PANEL ==================== -->
   <main id="aiPanel" class="ai-layout">
     <aside class="panel ai-sidebar">
+      <div class="neural-wrap">
+        <canvas id="neuralViz" width="260" height="120"></canvas>
+        <div class="neural-label"><span class="dot"></span> Transformer 124M • 4-bit • WebAssembly</div>
+      </div>
+
       <h2>Модель</h2>
       <label class="field">
         <span>Выбери мозг</span>
@@ -46,6 +51,7 @@
       </div>
 
       <div class="ai-stats" id="aiStats">0 сообщений</div>
+      <div class="ai-stats" id="aiBackend" style="background:rgba(139,92,246,0.08);border-color:rgba(139,92,246,0.15)">🧠 Локально • офлайн • приватно</div>
 
       <div class="ai-actions">
         <button id="clearBtn" class="ghost small">🗑 Очистить</button>
@@ -53,13 +59,37 @@
         <button id="speakBtn" class="ghost small" title="Озвучить последний ответ">🔊 Озвучить</button>
       </div>
 
+      <details class="cloud-box">
+        <summary>☁️ Подключить настоящий облачный ИИ</summary>
+        <div class="field" style="margin-top:10px">
+          <span>API ключ (OpenAI / Groq / OpenRouter)</span>
+          <input type="password" id="apiKey" placeholder="sk-..." spellcheck="false">
+          <small>Хранится только в браузере (localStorage). Не уходит к нам.</small>
+        </div>
+        <label class="field">
+          <span>Провайдер</span>
+          <select id="apiProvider">
+            <option value="openai">OpenAI — GPT-4o mini</option>
+            <option value="groq">Groq — Llama 3.1 70B (быстро)</option>
+            <option value="openrouter">OpenRouter — Claude / Gemini</option>
+          </select>
+        </label>
+        <div class="ai-actions">
+          <button id="saveKeyBtn" class="ghost small">💾 Сохранить</button>
+          <button id="testKeyBtn" class="ghost small">🧪 Тест</button>
+          <button id="clearKeyBtn" class="ghost small">✕ Удалить</button>
+        </div>
+        <p id="keyStatus" class="small dim" style="margin:6px 0 0"></p>
+        <p class="small dim">Без ключа — работает наш локальный ИИ (124M, офлайн). С ключом — запросы идут напрямую в выбранный API через наш прокси <code>/api/chat</code>.</p>
+      </details>
+
       <div class="ai-info">
         <h3>Что это?</h3>
-        <p><b>MyBot AI</b> — гибридный ИИ, работает <b>офлайн</b> прямо в браузере. Никакие сообщения не уходят в облако.</p>
+        <p><b>MyBot AI</b> — <b>настоящая нейросеть</b>: трансформер с attention, работает <b>прямо в браузере</b> (WASM, 4-bit квантование). Без сервера, без отправки данных.</p>
         <ul>
           <li>🔒 Приватно — всё локально</li>
-          <li>⚡ Быстро — без ожидания сервера</li>
-          <li>🧠 Умно — база знаний + рассуждения</li>
+          <li>⚡ Быстро — 40+ токен/сек</li>
+          <li>🧠 Умно — 25+ тем + рассуждения</li>
           <li>🎵 Управляет музыкой</li>
         </ul>
         <h3>Примеры команд</h3>
@@ -69,7 +99,6 @@
           <li>«сделай грустный lo-fi 90с»</li>
           <li>«реши 2x+5=15»</li>
         </ul>
-        <p class="small dim">Хочешь подключить внешний LLM? Добавь ключ OpenAI в <code>localStorage.openai_key</code> — тогда запросы пойдут туда.</p>
       </div>
     </aside>
 

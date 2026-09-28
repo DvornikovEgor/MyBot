@@ -54,10 +54,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         model = data.get("model", "mybot-pro")
         api_key = self.headers.get("Authorization", "").replace("Bearer ","") or os.environ.get("OPENAI_API_KEY", "") or data.get("api_key","")
 
-        # Если есть ключ — проксируем в OpenAI-совместимый API
+        # Если есть ключ — проксируем в выбранный API
         if api_key:
             try:
-                # пробуем OpenAI
+                # выбираем base_url по провайдеру
+                provider = data.get("model","openai")
+                base_map = {
+                    "openai": "https://api.openai.com/v1/chat/completions",
+                    "groq": "https://api.groq.com/openai/v1/chat/completions",
+                    "openrouter": "https://openrouter.ai/api/v1/chat/completions",
+                }
+                base_url = os.environ.get("OPENAI_BASE_URL") or base_map.get(provider, base_map["openai"])
                 payload = json.dumps({
                     "model": data.get("openai_model","gpt-4o-mini"),
                     "messages": messages,
@@ -65,7 +72,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     "max_tokens": 2000
                 }).encode()
                 req = urllib.request.Request(
-                    os.environ.get("OPENAI_BASE_URL","https://api.openai.com/v1/chat/completions"),
+                    base_url,
                     data=payload,
                     headers={"Content-Type":"application/json","Authorization": f"Bearer {api_key}"},
                     method="POST"
