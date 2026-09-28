@@ -4,6 +4,8 @@ import { compose } from './composer.js';
 import { renderComposition } from './engine.js';
 import { audioBufferToWav } from './wav.js';
 import { NOTE_NAMES, DRUM } from './theory.js';
+import { initChat } from './chat.js';
+import { AI_ONLY_PARAMS, recipeFromParams, recipeToParams, roman, SCALE_NAMES_RU } from './recipe.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -20,6 +22,7 @@ const state = {
   offset: 0,      // seconds already played before current start
   rollCanvas: document.createElement('canvas'),
   generating: false,
+  aiRecipe: null,   // last recipe from the AI director, or null when the user drives it manually
 };
 
 const TRACK_COLORS = {
@@ -49,6 +52,13 @@ function init() {
   if (params.get('bpm')) $('bpm').value = params.get('bpm');
   syncBpmUi();
 
+  // A shared link may carry a full AI recipe. The plain controls are already
+  // restored from the URL above; here we only take back what the AI adds.
+  if (params.get('progA') || params.get('scale')) {
+    state.aiRecipe = recipeFromParams(params);
+    showAiBadge(state.aiRecipe);
+  }
+
   $('generate').addEventListener('click', generate);
   $('randomSeed').addEventListener('click', () => {
     $('seed').value = String(Math.floor(Math.random() * 999999));
@@ -65,10 +75,17 @@ function init() {
   $('volume').addEventListener('input', (e) => {
     if (state.masterGain) state.masterGain.gain.value = Number(e.target.value);
   });
-  $('bpmAuto').addEventListener('change', syncBpmUi);
+  $('bpmAuto').addEventListener('change', () => {
+    syncBpmUi();
+    clearAiRecipe();
+  });
   $('bpm').addEventListener('input', () => {
     $('bpmVal').textContent = $('bpm').value;
+    clearAiRecipe();
   });
+  for (const id of ['style', 'mood', 'duration', 'key']) {
+    $(id).addEventListener('change', clearAiRecipe);
+  }
   $('seed').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') generate();
   });
@@ -97,6 +114,85 @@ function init() {
   fitCanvas($('vis'));
   fitCanvas($('roll'));
   generate();
+
+  initChat({ getContext: chatContext });
+  window.addEventListener('recipe:apply', (e) => onAiRecipe(e.detail));
+  window.addEventListener('recipe:changed', (e) => {
+    if (e.detail) showAiBadge(e.detail);
+    else clearAiBadge();
+  });
+}
+
+// =====================================================================
+// AI director
+// =====================================================================
+
+/** Everything the assistant needs to know about the current track. */
+function chatContext() {
+  const c = state.comp;
+  return {
+    recipe: state.aiRecipe || {
+      style: $('style').value,
+      mood: $('mood').value,
+      key: $('key').value === 'rand' ? 0 : Number($('key').value),
+      bpm: $('bpmAuto').checked ? 0 : Number($('bpm').value),
+      duration: Number($('duration').value),
+      seed: $('seed').value,
+    },
+    comp: c
+      ? {
+          bpm: c.bpm,
+          keyName: c.keyName,
+          scale: c.scaleName,
+          totalBars: c.totalBars,
+          chords: c.chords.slice(0, 12).map((ch) => ({ bar: ch.bar, root: ch.root, quality: ch.quality })),
+        }
+      : null,
+  };
+}
+
+function onAiRecipe(recipe) {
+  if (!recipe) return;
+  state.aiRecipe = recipe;
+  applyRecipeToControls(recipe, { generate: false });
+  showAiBadge(recipe);
+  generate();
+}
+
+function applyRecipeToControls(recipe, { generate: shouldGenerate = true } = {}) {
+  $('style').value = recipe.style;
+  $('mood').value = recipe.mood;
+  $('key').value = String(recipe.key);
+  $('duration').value = String(recipe.duration);
+  if (recipe.bpm) {
+    $('bpm').value = String(recipe.bpm);
+    $('bpmAuto').checked = false;
+  } else {
+    $('bpmAuto').checked = true;
+  }
+  $('seed').value = recipe.seed;
+  syncBpmUi();
+  if (shouldGenerate) generate();
+  return recipe;
+}
+
+/** The user took over the controls — the AI's harmonic choices no longer apply. */
+function clearAiRecipe() {
+  if (!state.aiRecipe) return;
+  state.aiRecipe = null;
+  clearAiBadge();
+}
+
+function showAiBadge(recipe) {
+  const scale = SCALE_NAMES_RU[recipe.scale] || recipe.scale;
+  $('aiBadgeText').textContent =
+    `ИИ: ${scale} · ${roman(recipe.progressionA)} / ${roman(recipe.progressionB)}` +
+    (recipe.title ? ` · ${recipe.title}` : '');
+  $('aiBadge').hidden = false;
+}
+
+function clearAiBadge() {
+  $('aiBadge').hidden = true;
 }
 
 function syncBpmUi() {
@@ -124,12 +220,17 @@ async function generate() {
   const durationSec = Number($('duration').value);
   const key = $('key').value === 'rand' ? null : Number($('key').value);
   const bpm = $('bpmAuto').checked ? null : Number($('bpm').value);
+  // The AI director's harmonic decisions ride along with every re-render.
+  const ai = state.aiRecipe;
 
   // Yield a frame so the status text paints.
   await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
 
   try {
-    const comp = compose({ style, mood, seed, durationSec, key, bpm });
+    const comp = compose({
+      style, mood, seed, durationSec, key, bpm,
+      ...(ai ? { scale: ai.scale, harmonicRhythm: ai.harmonicRhythm, progressionA: ai.progressionA, progressionB: ai.progressionB, title: ai.title } : {}),
+    });
     state.comp = comp;
     drawRoll(comp);
     blitRoll();
@@ -141,7 +242,11 @@ async function generate() {
     setButtons(true);
     $('status').textContent =
       `Готово · ${comp.totalBars} тактов · ${comp.bpm} BPM · ${comp.keyName} · сид ${comp.seed}`;
-    updateUrl({ seed, style, mood, duration: durationSec, key: $('key').value, bpm: $('bpmAuto').checked ? null : comp.bpm });
+    updateUrl({
+      seed, style, mood, duration: durationSec, key: $('key').value,
+      bpm: $('bpmAuto').checked ? null : comp.bpm,
+      recipe: ai,
+    });
   } catch (err) {
     console.error(err);
     $('status').textContent = 'Ошибка: ' + err.message;
@@ -158,7 +263,8 @@ function updateMeta(comp) {
   $('chords').textContent = uniq.join('  ·  ');
   $('structure').textContent = comp.sections.map((s) => `${s.name} (${s.bars})`).join(' → ');
   $('meta').textContent =
-    `${comp.styleName} · ${comp.moodName} · ${comp.bpm} BPM · ${comp.keyName} · сид ${comp.seed}`;
+    `${comp.title ? comp.title + ' · ' : ''}${comp.styleName} · ${comp.moodName} · ` +
+    `${comp.bpm} BPM · ${comp.keyName} · сид ${comp.seed}`;
 }
 
 function chordDisplayName(ch) {
@@ -175,6 +281,13 @@ function updateUrl(p) {
   if (p.duration) q.set('duration', p.duration);
   if (p.key && p.key !== 'rand') q.set('key', p.key);
   if (p.bpm) q.set('bpm', p.bpm);
+  // AI choices travel with the link, so a shared URL reproduces the same track.
+  if (p.recipe) {
+    const aiParams = recipeToParams(p.recipe);
+    for (const name of AI_ONLY_PARAMS) {
+      if (aiParams[name] !== '' && aiParams[name] != null) q.set(name, String(aiParams[name]));
+    }
+  }
   history.replaceState(null, '', '?' + q.toString());
 }
 

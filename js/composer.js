@@ -24,7 +24,8 @@ export function compose(opts) {
     bpm = Math.max(55, Math.min(160, bpm));
   }
   const swing = style.swing[0] + rng.next() * (style.swing[1] - style.swing[0]);
-  const scaleName = rng.pick(mood.scales);
+  // The AI director may name the mode explicitly; otherwise the mood picks one.
+  const scaleName = SCALES[opts.scale] ? opts.scale : rng.pick(mood.scales);
   const scaleSteps = SCALES[scaleName].steps;
   const tonic = opts.key != null ? opts.key : rng.int(0, 11);
   const tonicMidi = 48 + tonic; // C3..B3 area as tonal center reference
@@ -60,16 +61,17 @@ export function compose(opts) {
   sections.push({ name: 'Аутро', startBar: totalBars - outroBars, bars: outroBars, kind: 'outro' });
 
   // --- harmony ------------------------------------------------------------
-  const progA = style.progressions[rng.int(0, style.progressions.length - 1)];
-  let progB = style.progressions[rng.int(0, style.progressions.length - 1)];
-  if (progB === progA && style.progressions.length > 1) {
-    progB = style.progressions[(style.progressions.indexOf(progA) + 1) % style.progressions.length];
+  // Progressions come from the AI director when it supplies its own degrees.
+  const progA = pickProgression(rng, style, opts.progressionA);
+  let progB = pickProgression(rng, style, opts.progressionB);
+  if (progB.join() === progA.join() && style.progressions.length > 1) {
+    progB = style.progressions[(style.progressions.findIndex((p) => p.join() === progA.join()) + 1) % style.progressions.length];
   }
+  const hr = [0.5, 1, 2].includes(opts.harmonicRhythm) ? opts.harmonicRhythm : style.harmonicRhythm;
 
-  const chords = []; // { bar, bars, degree, ...chord }
+  const chords = [];
   {
-    const hr = style.harmonicRhythm; // chords per bar (0.5 => one chord per 2 bars)
-    const stepBars = 1 / hr;
+    const stepBars = 1 / hr; // chords per bar (0.5 => one chord per 2 bars)
     let prevVoicing = null;
     for (const sec of sections) {
       const prog = sec.kind === 'B' ? progB : progA;
@@ -319,12 +321,14 @@ export function compose(opts) {
 
   return {
     seed: seedStr,
+    title: opts.title || '',
     style: opts.style,
     styleName: style.name,
     mood: opts.mood,
     moodName: mood.name,
     bpm,
     swing,
+    harmonicRhythm: hr,
     tonic,
     scaleName,
     keyName: `${['До', 'До#', 'Ре', 'Ре#', 'Ми', 'Фа', 'Фа#', 'Соль', 'Соль#', 'Ля', 'Ля#', 'Си'][tonic]} ${SCALES[scaleName].name}`,
@@ -341,6 +345,19 @@ function clampToRange(midi, lo, hi) {
   while (midi < lo) midi += 12;
   while (midi > hi) midi -= 12;
   return midi;
+}
+
+/** An AI-supplied progression wins; anything malformed falls back to the style presets. */
+function pickProgression(rng, style, candidate) {
+  if (
+    Array.isArray(candidate) &&
+    candidate.length >= 2 &&
+    candidate.length <= 6 &&
+    candidate.every((d) => Number.isInteger(d) && d >= 0 && d <= 6)
+  ) {
+    return candidate.slice();
+  }
+  return style.progressions[rng.int(0, style.progressions.length - 1)];
 }
 
 function mutateRhythm(rng, rhythm, amount) {

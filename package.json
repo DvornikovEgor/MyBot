@@ -1,0 +1,12 @@
+{
+  "name": "mybot-music-generator",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Генератор музыки в браузере с AI-дирижёром (Gemini)",
+  "type": "module",
+  "scripts": {
+    "start": "python3 server.py",
+    "test": "node --test tests/recipe.test.mjs tests/ui.test.mjs",
+    "check": "node --check js/app.js && node --check js/chat.js && node --check js/composer.js"
+  }
+}

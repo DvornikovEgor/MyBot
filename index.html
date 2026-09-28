@@ -105,7 +105,36 @@
         <p id="structure" class="meta dim"></p>
         <p id="chords" class="meta chords"></p>
       </div>
+
+      <!-- ============ AI director ============ -->
+      <div id="aiBadge" class="ai-badge" hidden>
+        <span class="dot"></span><span id="aiBadgeText">ИИ-режим</span>
+      </div>
     </aside>
+
+    <!-- ============ chat ============ -->
+    <section class="panel chat-panel" aria-label="AI-дирижёр">
+      <div class="chat-head">
+        <h2>AI-дирижёр</h2>
+        <span id="aiStatus" class="ai-status">проверяю…</span>
+      </div>
+
+      <div id="chatLog" class="chat-log" role="log" aria-live="polite"></div>
+
+      <div class="chips" id="chips">
+        <button class="chip" data-prompt="Сделай тёмный синтвейв про ночную поездку, ми миноре, 100 BPM">Ночная поездка</button>
+        <button class="chip" data-prompt="Грустный лоу-фай под дождь, короче — 30 секунд">Дождь, 30 секунд</button>
+        <button class="chip" data-prompt="Эпичное техно 140 BPM для забега">Техно для забега</button>
+        <button class="chip" data-prompt="Спокойная классика без барабанов, медленно">Классика без ударных</button>
+      </div>
+
+      <form id="chatForm" class="chat-form" autocomplete="off">
+        <textarea id="chatInput" rows="1" maxlength="2000" placeholder="Опиши трек словами: «хочу эпичное техно 140 BPM»…" aria-label="Сообщение AI-дирижёру"></textarea>
+        <button id="chatSend" class="icon-btn" type="submit" aria-label="Отправить" title="Отправить (Enter)">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h15"/><path d="M13 6l6 6-6 6"/></svg>
+        </button>
+      </form>
+    </section>
 
     <!-- ============ player ============ -->
     <section class="stage">
