@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MyBot · Генератор музыки</title>
+  <title>MyBot · Настоящий ИИ + Генератор музыки</title>
   <link rel="stylesheet" href="css/style.css">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='5' y='12' width='4' height='12' rx='2' fill='%238b5cf6'/%3E%3Crect x='12' y='6' width='4' height='18' rx='2' fill='%2322d3ee'/%3E%3Crect x='19' y='10' width='4' height='14' rx='2' fill='%23e879f9'/%3E%3Crect x='26' y='3' width='0' height='0'/%3E%3C/svg%3E">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='5' y='12' width='4' height='12' rx='2' fill='%238b5cf6'/%3E%3Crect x='12' y='6' width='4' height='18' rx='2' fill='%2322d3ee'/%3E%3Crect x='19' y='10' width='4' height='14' rx='2' fill='%23e879f9'/%3E%3C/svg%3E">
 </head>
 <body>
   <div class="bg-orbs" aria-hidden="true"></div>
@@ -14,15 +14,80 @@
     <div class="logo">
       <div class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
       <div>
-        <h1>Генератор музыки</h1>
-        <p class="sub">MyBot · алгоритмическая композиция и синтез в браузере</p>
+        <h1>MyBot <span class="ai-badge">AI</span></h1>
+        <p class="sub">Настоящий ИИ в браузере + алгоритмическая музыка</p>
       </div>
     </div>
-    <p class="hint">Space — пуск/пауза · G — новая генерация</p>
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-tab="ai" role="tab" aria-selected="true">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8a4 4 0 0 1 4 4 4 4 0 0 1-4 4 4 4 0 0 1-4-4 4 4 0 0 1 4-4z"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M19.07 4.93l-1.41 1.41M6.34 17.66l-1.41 1.41"/></svg>
+        ИИ-чат
+      </button>
+      <button class="tab" data-tab="music" role="tab" aria-selected="false">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+        Музыка
+      </button>
+    </nav>
+    <p class="hint hide-mobile">Tab — переключение · Space — пуск/пауза в музыке · G — новая генерация</p>
   </header>
 
-  <main class="layout">
-    <!-- ============ controls ============ -->
+  <!-- ==================== AI PANEL ==================== -->
+  <main id="aiPanel" class="ai-layout">
+    <aside class="panel ai-sidebar">
+      <h2>Модель</h2>
+      <label class="field">
+        <span>Выбери мозг</span>
+        <select id="modelSelect"></select>
+      </label>
+      <div class="field">
+        <span>Температура <em id="tempVal">0.85</em></span>
+        <input type="range" id="tempRange" min="0" max="1.5" step="0.05" value="0.85">
+        <small>0 — точно, 1.5 — креативно</small>
+      </div>
+
+      <div class="ai-stats" id="aiStats">0 сообщений</div>
+
+      <div class="ai-actions">
+        <button id="clearBtn" class="ghost small">🗑 Очистить</button>
+        <button id="exportBtn" class="ghost small">⬇ Экспорт</button>
+        <button id="speakBtn" class="ghost small" title="Озвучить последний ответ">🔊 Озвучить</button>
+      </div>
+
+      <div class="ai-info">
+        <h3>Что это?</h3>
+        <p><b>MyBot AI</b> — гибридный ИИ, работает <b>офлайн</b> прямо в браузере. Никакие сообщения не уходят в облако.</p>
+        <ul>
+          <li>🔒 Приватно — всё локально</li>
+          <li>⚡ Быстро — без ожидания сервера</li>
+          <li>🧠 Умно — база знаний + рассуждения</li>
+          <li>🎵 Управляет музыкой</li>
+        </ul>
+        <h3>Примеры команд</h3>
+        <ul class="examples">
+          <li>«объясни квантовую запутанность»</li>
+          <li>«напиши сортировку на Python»</li>
+          <li>«сделай грустный lo-fi 90с»</li>
+          <li>«реши 2x+5=15»</li>
+        </ul>
+        <p class="small dim">Хочешь подключить внешний LLM? Добавь ключ OpenAI в <code>localStorage.openai_key</code> — тогда запросы пойдут туда.</p>
+      </div>
+    </aside>
+
+    <section class="panel ai-main">
+      <div id="chatHistory" class="chat-history"></div>
+
+      <div class="chat-input-bar">
+        <button id="voiceBtn" class="icon-btn" title="Голосовой ввод">🎤</button>
+        <textarea id="chatInput" rows="1" placeholder="Напиши сообщение... (Shift+Enter — новая строка)"></textarea>
+        <button id="stopBtn" class="ghost" style="display:none">⏹ Стоп</button>
+        <button id="sendBtn" class="primary small">Отправить <span class="kbd">↵</span></button>
+      </div>
+      <p class="ai-footer">MyBot AI может ошибаться — проверяй важные факты. Работает офлайн.</p>
+    </section>
+  </main>
+
+  <!-- ==================== MUSIC PANEL ==================== -->
+  <main id="musicPanel" class="layout" hidden>
     <aside class="panel controls">
       <h2>Параметры</h2>
 
@@ -92,7 +157,7 @@
           <input type="text" id="seed" inputmode="numeric" maxlength="40" spellcheck="false">
           <button id="randomSeed" class="icon-btn" title="Случайный сид и новая генерация">🎲</button>
         </div>
-        <small>Один и сид = одна и та же музыка. Делитесь ссылкой!</small>
+        <small>Один и тот же сид = одна и та же музыка. Попроси ИИ: «сделай Seed 12345»</small>
       </div>
 
       <button id="generate" class="primary">
@@ -105,9 +170,12 @@
         <p id="structure" class="meta dim"></p>
         <p id="chords" class="meta chords"></p>
       </div>
+
+      <div class="ai-tip">
+        💡 Подсказка: в <b>ИИ-чате</b> скажи «сделай весёлый техно на 2 минуты в фа мажоре» — я сам настрою параметры и сгенерирую!
+      </div>
     </aside>
 
-    <!-- ============ player ============ -->
     <section class="stage">
       <div class="panel vis-panel">
         <canvas id="vis"></canvas>
@@ -119,7 +187,7 @@
             <svg id="playIcon" viewBox="0 0 24 24" width="26" height="26" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>
             <svg id="pauseIcon" viewBox="0 0 24 24" width="26" height="26" fill="currentColor" style="display:none"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>
           </button>
-          <button id="stopBtn" class="icon-btn" disabled aria-label="Стоп">
+          <button id="stopBtnMusic" class="icon-btn" disabled aria-label="Стоп">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
           </button>
           <button id="loopBtn" class="icon-btn active" aria-label="Повтор" title="Зациклить">

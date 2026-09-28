@@ -1,11 +1,13 @@
-// UI, player, piano roll and spectrum visualiser.
-
+// UI, player, piano roll, visualiser + AI tabs
 import { compose } from './composer.js';
 import { renderComposition } from './engine.js';
 import { audioBufferToWav } from './wav.js';
 import { NOTE_NAMES, DRUM } from './theory.js';
+import { initAI } from './ai-ui.js';
 
 const $ = (id) => document.getElementById(id);
+const $$ = (sel) => document.querySelector(sel);
+const $all = (sel) => document.querySelectorAll(sel);
 
 const state = {
   comp: null,
@@ -16,8 +18,8 @@ const state = {
   src: null,
   playing: false,
   loop: true,
-  startedAt: 0,   // ctx time corresponding to offset 0
-  offset: 0,      // seconds already played before current start
+  startedAt: 0,
+  offset: 0,
   rollCanvas: document.createElement('canvas'),
   generating: false,
 };
@@ -33,11 +35,58 @@ const TRACK_COLORS = {
 const KEY_NAMES = ['До', 'До#', 'Ре', 'Ре#', 'Ми', 'Фа', 'Фа#', 'Соль', 'Соль#', 'Ля', 'Ля#', 'Си'];
 
 // =====================================================================
+// Tabs + AI init
+// =====================================================================
+function initTabs() {
+  const tabs = $all('.tab');
+  const aiPanel = $('aiPanel');
+  const musicPanel = $('musicPanel');
+  function switchTab(name) {
+    tabs.forEach(t => {
+      const isActive = t.dataset.tab === name;
+      t.classList.toggle('active', isActive);
+      t.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    });
+    if (aiPanel) aiPanel.hidden = name !== 'ai';
+    if (musicPanel) musicPanel.hidden = name !== 'music';
+    localStorage.setItem('mybot_tab', name);
+    // resize canvases when switching to music
+    if (name === 'music') {
+      setTimeout(() => {
+        fitCanvas($('vis'));
+        fitCanvas($('roll'));
+        if (state.comp) { drawRoll(state.comp); blitRoll(); }
+      }, 50);
+    } else {
+      // focus chat input
+      setTimeout(()=> $('chatInput')?.focus(), 100);
+    }
+  }
+  tabs.forEach(t => t.addEventListener('click', ()=> switchTab(t.dataset.tab)));
+  // restore or default to ai (настоящий ИИ — главное)
+  const saved = localStorage.getItem('mybot_tab');
+  const initial = saved || 'ai';
+  switchTab(initial);
+
+  // клавиатура: Tab переключает? оставим Ctrl+1/2
+  window.addEventListener('keydown', (e)=>{
+    if (e.ctrlKey || e.metaKey) {
+      if (e.key === '1') { e.preventDefault(); switchTab('ai'); }
+      if (e.key === '2') { e.preventDefault(); switchTab('music'); }
+    }
+  });
+}
+
+// =====================================================================
 // Init
 // =====================================================================
 
 function init() {
-  // URL params
+  initTabs();
+  // init AI — настоящий ИИ
+  try { initAI(); } catch(e){ console.error('AI init failed', e); }
+
+  // URL params для музыки (работают независимо от вкладки)
   const params = new URLSearchParams(location.search);
   if (params.get('style')) $('style').value = params.get('style');
   if (params.get('mood')) $('mood').value = params.get('mood');
@@ -49,37 +98,43 @@ function init() {
   if (params.get('bpm')) $('bpm').value = params.get('bpm');
   syncBpmUi();
 
-  $('generate').addEventListener('click', generate);
-  $('randomSeed').addEventListener('click', () => {
+  $('generate')?.addEventListener('click', generate);
+  $('randomSeed')?.addEventListener('click', () => {
     $('seed').value = String(Math.floor(Math.random() * 999999));
     generate();
   });
-  $('playBtn').addEventListener('click', togglePlay);
-  $('stopBtn').addEventListener('click', () => stopPlayback(true));
-  $('loopBtn').addEventListener('click', () => {
+  $('playBtn')?.addEventListener('click', togglePlay);
+  // stop button — в новой разметке id=stopBtnMusic, в старой был stopBtn
+  const stopBtn = $('stopBtnMusic') || $('stopBtn');
+  stopBtn?.addEventListener('click', () => stopPlayback(true));
+  $('loopBtn')?.addEventListener('click', () => {
     state.loop = !state.loop;
     if (state.src) state.src.loop = state.loop;
     $('loopBtn').classList.toggle('active', state.loop);
   });
-  $('download').addEventListener('click', downloadWav);
-  $('volume').addEventListener('input', (e) => {
+  $('download')?.addEventListener('click', downloadWav);
+  $('volume')?.addEventListener('input', (e) => {
     if (state.masterGain) state.masterGain.gain.value = Number(e.target.value);
   });
-  $('bpmAuto').addEventListener('change', syncBpmUi);
-  $('bpm').addEventListener('input', () => {
+  $('bpmAuto')?.addEventListener('change', syncBpmUi);
+  $('bpm')?.addEventListener('input', () => {
     $('bpmVal').textContent = $('bpm').value;
   });
-  $('seed').addEventListener('keydown', (e) => {
+  $('seed')?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') generate();
   });
-  $('progress').addEventListener('pointerdown', (e) => {
+  $('progress')?.addEventListener('pointerdown', (e) => {
     if (!state.buffer) return;
     const rect = $('progress').getBoundingClientRect();
     const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     seekTo(frac * state.buffer.duration);
   });
   window.addEventListener('keydown', (e) => {
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+    // не мешаем чату
+    if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+    // только когда вкладка музыки активна — Space/G работают
+    const musicHidden = $('musicPanel')?.hidden;
+    if (musicHidden) return;
     if (e.code === 'Space') {
       e.preventDefault();
       togglePlay();
@@ -93,14 +148,24 @@ function init() {
     if (state.comp) blitRoll();
   });
 
-  $('loopBtn').classList.add('active');
-  fitCanvas($('vis'));
-  fitCanvas($('roll'));
+  $('loopBtn')?.classList.add('active');
+  if ($('vis')) fitCanvas($('vis'));
+  if ($('roll')) fitCanvas($('roll'));
   generate();
+
+  // авто-resize textarea чата
+  const chatInput = $('chatInput');
+  if (chatInput) {
+    chatInput.addEventListener('input', ()=>{
+      chatInput.style.height = 'auto';
+      chatInput.style.height = Math.min(chatInput.scrollHeight, 140) + 'px';
+    });
+  }
 }
 
 function syncBpmUi() {
-  const auto = $('bpmAuto').checked;
+  const auto = $('bpmAuto')?.checked;
+  if (!$('bpm')) return;
   $('bpm').disabled = auto;
   $('bpmVal').textContent = auto ? 'авто' : $('bpm').value;
 }
@@ -115,17 +180,16 @@ async function generate() {
   stopPlayback(true);
   state.buffer = null;
   setButtons(false);
-  $('status').textContent = 'Сочиняю мелодию…';
-  $('generate').classList.add('busy');
+  if ($('status')) $('status').textContent = 'Сочиняю мелодию…';
+  $('generate')?.classList.add('busy');
 
-  const seed = $('seed').value.trim() || String(Math.floor(Math.random() * 999999));
+  const seed = ($('seed')?.value.trim() || String(Math.floor(Math.random() * 999999)));
   const style = $('style').value;
   const mood = $('mood').value;
   const durationSec = Number($('duration').value);
   const key = $('key').value === 'rand' ? null : Number($('key').value);
   const bpm = $('bpmAuto').checked ? null : Number($('bpm').value);
 
-  // Yield a frame so the status text paints.
   await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
 
   try {
@@ -135,19 +199,19 @@ async function generate() {
     blitRoll();
     updateMeta(comp);
 
-    $('status').textContent = 'Синтезирую звук…';
+    if ($('status')) $('status').textContent = 'Синтезирую звук…';
     await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
     state.buffer = await renderComposition(comp);
     setButtons(true);
-    $('status').textContent =
+    if ($('status')) $('status').textContent =
       `Готово · ${comp.totalBars} тактов · ${comp.bpm} BPM · ${comp.keyName} · сид ${comp.seed}`;
     updateUrl({ seed, style, mood, duration: durationSec, key: $('key').value, bpm: $('bpmAuto').checked ? null : comp.bpm });
   } catch (err) {
     console.error(err);
-    $('status').textContent = 'Ошибка: ' + err.message;
+    if ($('status')) $('status').textContent = 'Ошибка: ' + err.message;
   } finally {
     state.generating = false;
-    $('generate').classList.remove('busy');
+    $('generate')?.classList.remove('busy');
   }
 }
 
@@ -155,9 +219,9 @@ function updateMeta(comp) {
   const names = comp.chords.map(chordDisplayName);
   const uniq = [];
   for (const n of names) if (uniq[uniq.length - 1] !== n) uniq.push(n);
-  $('chords').textContent = uniq.join('  ·  ');
-  $('structure').textContent = comp.sections.map((s) => `${s.name} (${s.bars})`).join(' → ');
-  $('meta').textContent =
+  if ($('chords')) $('chords').textContent = uniq.join('  ·  ');
+  if ($('structure')) $('structure').textContent = comp.sections.map((s) => `${s.name} (${s.bars})`).join(' → ');
+  if ($('meta')) $('meta').textContent =
     `${comp.styleName} · ${comp.moodName} · ${comp.bpm} BPM · ${comp.keyName} · сид ${comp.seed}`;
 }
 
@@ -179,9 +243,10 @@ function updateUrl(p) {
 }
 
 function setButtons(ready) {
-  $('playBtn').disabled = !ready;
-  $('stopBtn').disabled = !ready;
-  $('download').disabled = !ready;
+  if ($('playBtn')) $('playBtn').disabled = !ready;
+  const stopBtn = $('stopBtnMusic') || $('stopBtn');
+  if (stopBtn) stopBtn.disabled = !ready;
+  if ($('download')) $('download').disabled = !ready;
 }
 
 // =====================================================================
@@ -287,6 +352,7 @@ function tick() {
 }
 
 function updatePlayBtn() {
+  if (!$('playIcon')) return;
   $('playIcon').style.display = state.playing ? 'none' : 'block';
   $('pauseIcon').style.display = state.playing ? 'block' : 'none';
   document.body.classList.toggle('is-playing', state.playing);
@@ -294,9 +360,9 @@ function updatePlayBtn() {
 
 function updateProgressUI(pos, dur) {
   const frac = dur ? (pos % dur) / dur : 0;
-  $('progressFill').style.width = (frac * 100).toFixed(2) + '%';
-  $('timeCur').textContent = fmtTime(pos);
-  $('timeTot').textContent = fmtTime(dur);
+  if ($('progressFill')) $('progressFill').style.width = (frac * 100).toFixed(2) + '%';
+  if ($('timeCur')) $('timeCur').textContent = fmtTime(pos);
+  if ($('timeTot')) $('timeTot').textContent = fmtTime(dur);
 }
 
 function fmtTime(s) {
@@ -343,6 +409,7 @@ function rollGeometry(comp) {
 }
 
 function fitCanvas(cv) {
+  if (!cv) return;
   const dpr = window.devicePixelRatio || 1;
   const rect = cv.getBoundingClientRect();
   cv.width = Math.max(1, Math.floor(rect.width * dpr));
@@ -352,6 +419,7 @@ function fitCanvas(cv) {
 function drawRoll(comp) {
   const cv = state.rollCanvas;
   fitCanvas($('roll'));
+  if (!$('roll')) return;
   const cssW = $('roll').clientWidth;
   const cssH = $('roll').clientHeight;
   const dpr = window.devicePixelRatio || 1;
@@ -369,11 +437,9 @@ function drawRoll(comp) {
   const rowH = pitchH / rows;
   const x = (beat) => (beat / totalBeats) * W;
 
-  // background
   g.fillStyle = '#0d1030';
   g.fillRect(0, 0, W, H);
 
-  // grid
   for (let bar = 0; bar <= comp.totalBars; bar++) {
     const bx = x(bar * 4);
     g.fillStyle = bar % 4 === 0 ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.06)';
@@ -384,7 +450,6 @@ function drawRoll(comp) {
     g.fillStyle = 'rgba(255,255,255,0.03)';
     g.fillRect(x(beat), chordH, 1, pitchH);
   }
-  // pitch rows
   for (let i = 0; i < rows; i++) {
     const m = lo + i;
     const isBlack = [1, 3, 6, 8, 10].includes(((m % 12) + 12) % 12);
@@ -398,7 +463,6 @@ function drawRoll(comp) {
     }
   }
 
-  // chords strip
   for (const ch of comp.chords) {
     const cx = x(ch.bar * 4);
     const cw = x(ch.bar * 4 + ch.bars * 4) - cx;
@@ -409,7 +473,6 @@ function drawRoll(comp) {
     g.textBaseline = 'middle';
     g.fillText(chordDisplayName(ch), cx + 4, chordH / 2);
   }
-  // sections
   for (const sec of comp.sections) {
     const sx = x(sec.startBar * 4);
     g.fillStyle = 'rgba(34,211,238,0.9)';
@@ -419,7 +482,6 @@ function drawRoll(comp) {
     g.fillText(sec.name, sx + 5, chordH + 7);
   }
 
-  // pitched notes
   for (const ev of comp.events) {
     if (ev.track === 'drums') continue;
     const nx = x(ev.t);
@@ -431,7 +493,6 @@ function drawRoll(comp) {
     g.globalAlpha = 1;
   }
 
-  // drum lanes
   const laneTop = chordH + pitchH + ROLL.pad;
   const laneOf = (midi) => {
     if (midi === DRUM.KICK) return 0;
@@ -465,10 +526,10 @@ function hiRow(rows, lo, midi) {
 
 function blitRoll() {
   const cv = $('roll');
+  if (!cv) return;
   const g = cv.getContext('2d');
   g.clearRect(0, 0, cv.width, cv.height);
   g.drawImage(state.rollCanvas, 0, 0);
-  // playhead
   if (state.comp && state.buffer) {
     const pos = state.playing ? position() : state.offset;
     const spb = 60 / state.comp.bpm;
@@ -490,6 +551,7 @@ const visState = { freq: null, wave: null };
 
 function drawVisualizer(pos) {
   const cv = $('vis');
+  if (!cv) return;
   const g = cv.getContext('2d');
   const dpr = window.devicePixelRatio || 1;
   const W = cv.width, H = cv.height;
@@ -507,7 +569,6 @@ function drawVisualizer(pos) {
   an.getByteFrequencyData(visState.freq);
   an.getByteTimeDomainData(visState.wave);
 
-  // spectrum bars
   const bars = 72;
   const grad = g.createLinearGradient(0, H, 0, 0);
   grad.addColorStop(0, 'rgba(139,92,246,0.95)');
@@ -515,7 +576,6 @@ function drawVisualizer(pos) {
   grad.addColorStop(1, 'rgba(232,121,249,0.95)');
   const bw = W / bars;
   for (let i = 0; i < bars; i++) {
-    // log-ish mapping for nicer spectrum
     const idx = Math.floor(Math.pow(i / bars, 1.6) * (visState.freq.length * 0.7));
     const v = visState.freq[idx] / 255;
     const h = Math.max(2 * dpr, v * H * 0.9);
@@ -525,7 +585,6 @@ function drawVisualizer(pos) {
     g.globalAlpha = 1;
   }
 
-  // waveform
   g.beginPath();
   for (let i = 0; i < visState.wave.length; i += 8) {
     const px = (i / (visState.wave.length - 1)) * W;
@@ -540,6 +599,7 @@ function drawVisualizer(pos) {
 
 function drawVisualizerIdle() {
   const cv = $('vis');
+  if (!cv) return;
   const g = cv.getContext('2d');
   const dpr = window.devicePixelRatio || 1;
   const W = cv.width, H = cv.height;
