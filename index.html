@@ -79,7 +79,34 @@
     .dot { width: 9px; height: 9px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 0 4px rgba(34, 197, 94, .15); }
     .hint { font-size: 12px; line-height: 1.6; color: var(--muted); }
     .hint b { color: #cbd5e1; font-weight: 600; }
-    .btn {
+    .map-open { width: 100%; }
+    .map-panel {
+      border-bottom: 1px solid var(--border);
+      background: rgba(15, 23, 42, .48);
+      padding: 14px 22px 16px;
+      max-height: 48%;
+      overflow: auto;
+    }
+    .map-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+    .map-title { font-size: 14px; font-weight: 700; }
+    .map-subtitle { color: var(--muted); font-size: 11px; margin-top: 2px; }
+    .map-close { border: 1px solid var(--border); background: transparent; color: var(--muted); border-radius: 9px; width: 31px; height: 31px; cursor: pointer; font-size: 18px; }
+    .map-close:hover { color: var(--text); border-color: var(--accent); }
+    .map-tabs { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 11px; }
+    .map-tab { border: 1px solid var(--border); background: var(--panel-2); color: var(--muted); border-radius: 9px; padding: 7px 10px; cursor: pointer; font-size: 12px; }
+    .map-tab:hover, .map-tab.active { color: white; border-color: var(--accent); background: rgba(99, 102, 241, .28); }
+    .map-canvas { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: #0b1324; min-height: 170px; }
+    .map-canvas svg { display: block; width: 100%; height: auto; min-height: 190px; }
+    .map-canvas .grid { stroke: rgba(148, 163, 184, .12); stroke-width: 1; }
+    .map-canvas .land { fill: #334b68; stroke: #7894b5; stroke-width: 2; stroke-linejoin: round; }
+    .map-canvas .land.alt { fill: #3c5272; }
+    .map-canvas .water { fill: #10213b; }
+    .map-canvas .route { fill: none; stroke: #a78bfa; stroke-width: 2; stroke-dasharray: 5 5; opacity: .8; }
+    .map-canvas .city { fill: #fbbf24; stroke: #fff7ed; stroke-width: 2; }
+    .map-canvas text { fill: #dbeafe; font: 13px system-ui, sans-serif; }
+    .map-canvas .label { fill: #f8fafc; font-weight: 600; }
+    .map-caption { color: var(--muted); font-size: 11px; line-height: 1.45; margin-top: 8px; }
+    .btn { 
       border: 0; border-radius: 10px;
       padding: 11px 14px; font-size: 14px; font-weight: 600;
       color: #f8fafc; cursor: pointer;
@@ -187,6 +214,7 @@
         <b>2+2*10</b>, знаю время, дату, умею шутить.<br/>
         Скажи <b>«меня зовут …»</b> — запомню!
       </div>
+      <button class="btn ghost map-open" id="mapBtn" type="button">🗺 Открыть офлайн-карты</button>
       <button class="btn ghost" id="resetBtn" type="button">↺ Сбросить память</button>
     </aside>
 
@@ -200,6 +228,24 @@
           </div>
         </div>
       </header>
+
+      <section class="map-panel" id="mapPanel" hidden aria-label="Офлайн-карты">
+        <div class="map-toolbar">
+          <div>
+            <div class="map-title">Офлайн-карты</div>
+            <div class="map-subtitle">Схемы встроены в приложение · интернет не нужен</div>
+          </div>
+          <button class="map-close" id="closeMap" type="button" aria-label="Закрыть карты">×</button>
+        </div>
+        <div class="map-tabs" id="mapTabs" role="tablist" aria-label="Выбор карты">
+          <button class="map-tab active" type="button" data-map="world" role="tab">🌍 Мир</button>
+          <button class="map-tab" type="button" data-map="russia" role="tab">🪆 Россия</button>
+          <button class="map-tab" type="button" data-map="usa" role="tab">🗽 США</button>
+          <button class="map-tab" type="button" data-map="europe" role="tab">🏰 Европа</button>
+        </div>
+        <div class="map-canvas" id="mapCanvas" role="img" aria-label="Карта мира"></div>
+        <div class="map-caption" id="mapCaption"></div>
+      </section>
 
       <div class="messages" id="messages" aria-live="polite"></div>
 
@@ -218,9 +264,104 @@
     const input = document.getElementById('input');
     const sendBtn = document.getElementById('sendBtn');
     const resetBtn = document.getElementById('resetBtn');
-    const toast = document.getElementById('toast');
+    const mapBtn = document.getElementById('mapBtn');
+    const mapPanel = document.getElementById('mapPanel');
+    const closeMap = document.getElementById('closeMap');
+    const mapCanvas = document.getElementById('mapCanvas');
+    const mapCaption = document.getElementById('mapCaption');
 
-    function scrollToBottom() {
+    // Несколько схематических карт хранятся прямо в HTML. Это не онлайн-карты
+    // и не запрос к картографическому сервису: всё работает без сети.
+    const mapCatalog = {
+      world: {
+        caption: 'Мир · схематическая офлайн-карта. Жёлтые точки отмечают несколько крупных городов.',
+        svg: `<svg viewBox="0 0 900 390" xmlns="http://www.w3.org/2000/svg" aria-label="Схематическая карта мира">
+          <rect class="water" width="900" height="390"/>
+          <g class="grid">
+            <path d="M0 78H900M0 156H900M0 234H900M0 312H900"/>
+            <path d="M150 0V390M300 0V390M450 0V390M600 0V390M750 0V390"/>
+          </g>
+          <path class="land" d="M63 91l39-29 77 7 49 36-20 31-43 5-19 31-44-11-21-29-31-9z"/>
+          <path class="land" d="M194 190l38 7 30 37-12 49-28 17-18-47-26-30z"/>
+          <path class="land alt" d="M410 91l49-20 49 18 20 39-27 28-39-6-27 16-34-27z"/>
+          <path class="land" d="M473 175l47 11 17 43-27 59-29 35-24-48 8-40-20-32z"/>
+          <path class="land alt" d="M529 86l54-22 94 8 74 32 46 39-27 26-64-6-40 20-39-19-47 2-28-30z"/>
+          <path class="land" d="M594 174l69 7 34 34-13 45-39 18-36-22-34-40z"/>
+          <path class="land alt" d="M731 282l47 4 38 26-31 30-49-9-20-25z"/>
+          <path class="route" d="M151 115C310 45 455 120 618 123S770 160 815 303"/>
+          <circle class="city" cx="160" cy="112" r="5"/><text x="169" y="108">Нью-Йорк</text>
+          <circle class="city" cx="479" cy="109" r="5"/><text x="487" y="103">Москва</text>
+          <circle class="city" cx="575" cy="123" r="5"/><text x="583" y="118">Дели</text>
+          <circle class="city" cx="725" cy="167" r="5"/><text x="733" y="162">Токио</text>
+        </svg>`
+      },
+      russia: {
+        caption: 'Россия · схематическая карта с основными городами от европейской части до Дальнего Востока.',
+        svg: `<svg viewBox="0 0 900 390" xmlns="http://www.w3.org/2000/svg" aria-label="Схематическая карта России">
+          <rect class="water" width="900" height="390"/>
+          <g class="grid"><path d="M0 78H900M0 156H900M0 234H900M0 312H900"/><path d="M150 0V390M300 0V390M450 0V390M600 0V390M750 0V390"/></g>
+          <path class="land" d="M85 139l52-49 91-17 61 21 70-21 85 14 77-25 91 22 69-11 92 39 44 45-51 25-53-13-46 31-67-16-43 33-65-9-54 28-77-22-61 15-73-27-54 13-42-34z"/>
+          <path class="land alt" d="M190 176l66-17 54 26 38 52-27 37-60-11-50-32z"/>
+          <path class="route" d="M205 146C360 174 500 183 721 165"/>
+          <circle class="city" cx="206" cy="141" r="5"/><text x="216" y="137" class="label">Санкт-Петербург</text>
+          <circle class="city" cx="239" cy="165" r="5"/><text x="249" y="185" class="label">Москва</text>
+          <circle class="city" cx="465" cy="178" r="5"/><text x="475" y="174">Новосибирск</text>
+          <circle class="city" cx="694" cy="160" r="5"/><text x="704" y="156">Владивосток</text>
+        </svg>`
+      },
+      usa: {
+        caption: 'США · схематическая карта с несколькими штатами и городами. Границы условные.',
+        svg: `<svg viewBox="0 0 900 390" xmlns="http://www.w3.org/2000/svg" aria-label="Схематическая карта США">
+          <rect class="water" width="900" height="390"/>
+          <g class="grid"><path d="M0 78H900M0 156H900M0 234H900M0 312H900"/><path d="M150 0V390M300 0V390M450 0V390M600 0V390M750 0V390"/></g>
+          <path class="land" d="M92 109l45-20 69 12 66-9 70 16 64-7 63 23 49-6 61 25 46 3 55 31-21 34-43 4-21 27-46-14-43 24-59-9-49 22-52-19-65 11-48-24-59 9-47-34-46-37z"/>
+          <path class="land alt" d="M285 221l43 12 24 47-29 37-36-21-17-42z"/>
+          <path class="route" d="M150 153C292 185 462 150 721 205"/>
+          <circle class="city" cx="160" cy="157" r="5"/><text x="170" y="152">Сан-Франциско</text>
+          <circle class="city" cx="388" cy="163" r="5"/><text x="398" y="158">Канзас-Сити</text>
+          <circle class="city" cx="662" cy="177" r="5"/><text x="672" y="172">Нью-Йорк</text>
+          <circle class="city" cx="347" cy="267" r="5"/><text x="357" y="263">Хьюстон</text>
+        </svg>`
+      },
+      europe: {
+        caption: 'Европа · схематическая карта для быстрого ориентирования, без навигации и масштаба.',
+        svg: `<svg viewBox="0 0 900 390" xmlns="http://www.w3.org/2000/svg" aria-label="Схематическая карта Европы">
+          <rect class="water" width="900" height="390"/>
+          <g class="grid"><path d="M0 78H900M0 156H900M0 234H900M0 312H900"/><path d="M150 0V390M300 0V390M450 0V390M600 0V390M750 0V390"/></g>
+          <path class="land" d="M129 116l41-35 58 7 37-25 66 21 31-34 54 22 57-5 39 31 70-7 34 39 56-7 59 38-25 40-49-6-28 34-51-14-46 40-51-26-44 35-38-37-59 12-34-46-60 11-51-33z"/>
+          <path class="land alt" d="M585 247l52 10 44 38-42 37-51-23-16-36z"/>
+          <path class="land alt" d="M282 216l33 7 17 55-28 26-22-44z"/>
+          <path class="route" d="M207 131C330 140 445 145 644 157"/>
+          <circle class="city" cx="282" cy="141" r="5"/><text x="292" y="136">Лондон</text>
+          <circle class="city" cx="425" cy="161" r="5"/><text x="435" y="156">Берлин</text>
+          <circle class="city" cx="360" cy="223" r="5"/><text x="370" y="218">Рим</text>
+          <circle class="city" cx="635" cy="152" r="5"/><text x="645" y="147">Москва</text>
+        </svg>`
+      }
+    };
+
+    function renderMap(key) {
+      const selected = mapCatalog[key] || mapCatalog.world;
+      mapCanvas.innerHTML = selected.svg;
+      mapCaption.textContent = selected.caption;
+      document.querySelectorAll('.map-tab').forEach((tab) => {
+        const active = tab.dataset.map === key;
+        tab.classList.toggle('active', active);
+        tab.setAttribute('aria-selected', active ? 'true' : 'false');
+      });
+    }
+
+    function toggleMaps(open) {
+      mapPanel.hidden = !open;
+      if (open) {
+        renderMap('world');
+        mapBtn.setAttribute('aria-expanded', 'true');
+      } else {
+        mapBtn.setAttribute('aria-expanded', 'false');
+      }
+    }
+
+    function scrollToBottom() { 
       requestAnimationFrame(() => {
         messages.scrollTop = messages.scrollHeight;
       });
@@ -334,6 +475,12 @@
       } catch (err) {
         showToast('Не удалось сбросить память');
       }
+    });
+
+    mapBtn.addEventListener('click', () => toggleMaps(mapPanel.hidden));
+    closeMap.addEventListener('click', () => toggleMaps(false));
+    document.querySelectorAll('.map-tab').forEach((tab) => {
+      tab.addEventListener('click', () => renderMap(tab.dataset.map));
     });
 
     // Приветствие при загрузке.
